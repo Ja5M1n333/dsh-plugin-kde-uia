@@ -6,6 +6,8 @@
 !/dsh-plugin-kde-uia
 !/.gitignore
 !/.gitattributes
+!/README.md
+!/WORKFLOW.md
 
 # Build artifacts, caches and local scratch data.
 node_modules/
