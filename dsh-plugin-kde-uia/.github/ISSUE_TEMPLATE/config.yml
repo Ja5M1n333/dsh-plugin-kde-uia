@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How to troubleshoot first / 先看看故障排查
+    url: https://github.com/Ja5M1n333/dsh-plugin-kde-uia/blob/main/dsh-plugin-kde-uia/README.md#troubleshooting
+    about: Most failures are named by `kde_uia_doctor` and documented in the README. 大部分问题 README 里都有说明。

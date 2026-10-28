@@ -1,0 +1,35 @@
+# dsh-plugin-kde-uia bundle patch: one entry describing how this bundle contributes
+# rows to the profile. Profiles select this file through `dsh.bundle.patch` in this
+# package's package.json; the inliner splices `insert` into the profile tree the
+# same way `dsh-base` and other bundles do.
+#
+# Every row is opt-in: users copy what they need into their profile's
+# cordis.patch.yml (see README "安装"). The rows here are the defaults and use
+# only documented tool-registry and subprocess routes, so they load on Windows,
+# macOS and Linux DSH hosts alike.
+
+- insert:
+    # The model-facing tools (`kde_uia_*`). Mounted by default; set
+    # `disabled: true` in a profile patch to hide them on machines without a
+    # Linux/KDE desktop.
+    - id: tool-kde-uia
+      name: dsh-plugin-kde-uia
+      config:
+        # auto | wsl | ssh | local
+        runtime: auto
+        # WSL distribution name; empty = WSL's default distribution.
+        wslDistribution: ''
+        # SSH host (wsl/auto reach it through a Windows OpenSSH proxy too).
+        sshHost: ''
+        sshIdentity: ''
+        sshOptions: []
+        # Where the bundled Python client lives in the Linux environment.
+        remotePath: ''
+        # Python interpreter inside Linux (never invoked with the host's Windows Python).
+        remotePython: 'python3'
+        # wsl.exe (empty = found on PATH or in System32).
+        wslCommand: ''
+        # Per-call unprivileged command budget.
+        timeoutMs: 120000
+        # The offline "doctor" probe at apply() time.
+        doctorOnLoad: true

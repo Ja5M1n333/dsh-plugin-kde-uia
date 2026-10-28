@@ -1,0 +1,79 @@
+name: Bug report / 问题反馈
+description: Something does not work / 有东西不工作
+title: "[Bug] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report something.
+
+        谢谢反馈！发起前请先跑一次 `kde_uia_doctor`（或 `node lib/cli.js doctor`），
+        它输出的每一条都会直接告诉我们问题出在哪一层。
+
+        **请如实说明：作者是学生，会看 issue，但不保证很快回复或修复。**
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version / 插件版本
+      description: From `package.json` or the release you downloaded.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version / DSH 版本
+      description: Shown in DSH Settings, or the `version` value of your installation.
+      placeholder: "0.2.0-rc.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime / 运行时
+      options:
+        - auto (WSL on Windows / local on Linux)
+        - wsl
+        - ssh
+        - local (Linux host with the desktop)
+    validations:
+      required: true
+  - type: input
+    id: plasma
+    attributes:
+      label: Desktop / 桌面环境
+      description: Plasma version and session type.
+      placeholder: "KDE Plasma 6.1, Wayland"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: doctor output / doctor 输出
+      description: Paste the full output of `kde_uia_doctor` or `node lib/cli.js doctor`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did / 复现步骤
+      description: The tool calls or commands, in order.
+      placeholder: |
+        1. kde_uia_windows
+        2. kde_uia_tree {"window": "Dolphin"}
+        3. kde_uia_click {"ref": "..."}
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What happened vs. what you expected / 实际结果与预期
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else / 其他信息
+      description: Error codes, screenshots, application names (the app under test matters a lot for AT-SPI).

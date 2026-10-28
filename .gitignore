@@ -1,0 +1,30 @@
+# This working folder also holds unrelated files (older projects, notes, downloads).
+# Everything at the top level is ignored, then the project directories are re-included.
+/*
+!/scripts
+!/kde-uia
+!/dsh-plugin-kde-uia
+!/.gitignore
+!/.gitattributes
+
+# Build artifacts, caches and local scratch data.
+node_modules/
+.cache/
+*.tgz
+package-lock.json
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.runtime/
+kde-uia/.runtime/
+*.png
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
