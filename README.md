@@ -31,6 +31,18 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 
 装好后 agent 就能调用 `kde_uia_windows`、`kde_uia_tree`、`kde_uia_click` 等工具。
 
+> ## ⚠️ 这个插件很吃 token，用之前先看这里
+>
+> 实测教训：测试期间余额从 **¥5.97 掉到 ¥0**。不是插件有 bug，是**用法太奢侈**。
+>
+> **从便宜到贵的调用顺序：** `windows` → `find` → `info` → `tree --depth 4` → `tree-text`
+>
+> - `tree-text` **必须**带 `--window`/`--app`/`--ref`，否则会读整个桌面（最贵）
+> - 能用 `find` + `info` 就不必用 `tree`；能 `tree --depth 4` 就不必用 `tree-text`
+> - **不要为了"确认"反复读同一棵树**；也不要拿截图代替读结构
+>
+> 详见 [FIELD-TEST.md](FIELD-TEST.md) 与 [HANDOFF-GUIDE.md](HANDOFF-GUIDE.md)。
+
 ## 状态（v0.1.3，三轮真机验证之后）
 
 **已经在真实的 KDE Plasma 6.8.2 + Wayland 桌面上跑过。** 完整环境、原始输出和未通过项见

@@ -1,3 +1,5 @@
+> ⚠️ **This plugin eats tokens.** A tree-text call over one page produced 507 lines of context; the test balance went from CNY 5.97 to CNY 0. Cheapest first: `windows` → `find` → `info` → `tree --depth 4` → `tree-text`. Always scope `tree-text` with window/app/ref, never re-read a tree to "confirm", and never use screenshots in place of reading structure.
+
 # dsh-plugin-kde-uia
 
 **Windows UI Automation–style control of a Linux KDE Plasma desktop for DeepSeek Harness agents.**

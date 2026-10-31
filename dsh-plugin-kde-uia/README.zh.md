@@ -1,3 +1,5 @@
+> ⚠️ **这个插件很吃 token。** 一次 `tree-text` 读一个页面就产生 507 行上下文，测试期间余额从 ¥5.97 掉到 ¥0。**从便宜到贵的顺序：** `windows` → `find` → `info` → `tree --depth 4` → `tree-text`。`tree-text` 必须带作用域，不要反复读同一棵树，也不要拿截图代替读结构。
+
 # dsh-plugin-kde-uia
 
 **让 DeepSeek Harness 的 agent 像用 Windows UI Automation（UIA）一样操控 Linux KDE 桌面。**
