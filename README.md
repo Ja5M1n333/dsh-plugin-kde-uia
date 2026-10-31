@@ -17,7 +17,12 @@
 ```bash
 # 1) 在 KDE 桌面里装依赖（Arch Linux）
 sudo pacman -S python-gobject at-spi2-core qt6-tools kconfig spectacle
-yay -S kdotool            # AUR，Wayland 下需要它来枚举/控制窗口
+yay -S kdotool ydotool    # AUR。kdotool 枚举/控制窗口；ydotool 是键盘输入的唯一可行路径
+
+# 1.5) 开机自启 ydotool 守护进程（键盘输入必需；没有它则只能读、点，不能打字）
+#      /dev/uinput 需当前用户可写（ACL 或加入 input 组）
+sudo setfacl -m u:$USER:rw /dev/uinput
+systemctl --user enable --now ydotool.service    # ydotool 包自带该服务，重启后自动运行
 
 # 2) 安装 Python 客户端
 sudo mkdir -p /opt/dsh
@@ -28,6 +33,11 @@ PYTHONPATH=/opt/dsh/kde-uia python3 -m kde_uia doctor
 # 3) 把插件装进 DSH
 dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-uia
 ```
+
+> **关于 `ydotool`：** 原生 Wayland 下 XTest 无效、kdotool 没有输入命令、KWin 不执行脚本，
+> 所以**键盘输入完全依赖 `ydotool`**。装好并跑起 `ydotoold` 后，插件会自动优先使用它；
+> 没装也能用（读窗口、点击、截图都正常），只是打不了字。
+> 注意：`ydotool` 注入原始键码，**输入法会改写字母**，打字前请确保处于英文布局。
 
 装好后 agent 就能调用 `kde_uia_windows`、`kde_uia_tree`、`kde_uia_click` 等工具。
 

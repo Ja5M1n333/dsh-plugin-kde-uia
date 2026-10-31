@@ -144,6 +144,9 @@ Arch Linux（一行装好，包名已核对）：
 
 ```bash
 sudo pacman -S python-gobject at-spi2-core qt6-tools kconfig xdotool wmctrl spectacle
+yay -S kdotool ydotool   # AUR：kdotool 枚举/控制窗口；ydotool 负责键盘输入（Wayland 必需）
+sudo setfacl -m u:$USER:rw /dev/uinput
+systemctl --user enable --now ydotool.service   # 开机自启
 # Wayland 下的原始输入注入（kdotool 只在 AUR，官方源里没有）：
 yay -S kdotool
 ```

@@ -150,6 +150,9 @@ Arch Linux (one line, verified package names):
 
 ```bash
 sudo pacman -S python-gobject at-spi2-core qt6-tools kconfig xdotool wmctrl spectacle
+yay -S kdotool ydotool   # AUR: kdotool for window control, ydotool for keyboard input (required on Wayland)
+sudo setfacl -m u:$USER:rw /dev/uinput
+systemctl --user enable --now ydotool.service   # start on login
 # optional for Wayland input — kdotool is AUR-only, there is no official package:
 yay -S kdotool
 ```
