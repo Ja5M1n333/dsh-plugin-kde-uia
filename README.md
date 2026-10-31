@@ -31,7 +31,7 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 
 装好后 agent 就能调用 `kde_uia_windows`、`kde_uia_tree`、`kde_uia_click` 等工具。
 
-## 状态（v0.1.2，两轮真机验证之后）
+## 状态（v0.1.3，三轮真机验证之后）
 
 **已经在真实的 KDE Plasma 6.8.2 + Wayland 桌面上跑过。** 完整环境、原始输出和未通过项见
 **[FIELD-TEST.md](FIELD-TEST.md)**。
@@ -44,7 +44,7 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 | 窗口激活 / 最小化 / 关闭 / 缩放 | ✅ 通过（0.1.2 修掉了 `window-op` 报错） |
 | 截图（spectacle） | ✅ 通过 |
 | **键盘输入（`kde_uia_keys` / `kde_uia_type`）** | ✅ 通过，**前提是装了 `ydotool`**（见下） |
-| 网页正文文字 | ❌ 读不到：Firefox 经 `document web` 只暴露 4 个占位符 |
+| 网页正文文字 | ✅ 通过 `tree-text` / `tree --include_text` 读取（0.1.3 新增） |
 | 终端内容 | ⚠️ 部分：Konsole 报告 7181 字符，实际只提供约 2591 字符 |
 
 ### 这个插件的用途，以及它目前能做到哪一步
@@ -53,8 +53,10 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 
 - ✅ **结构级读取完全可用**：窗口、工具栏、按钮、菜单、标签页（连"42封未读"都在）、对话框、
   页面骨架（`article` / `heading` / `paragraph` / `list`）都是结构化文本。
-- ⚠️ **内容级读取有缺口**：网页正文和终端尾部拿不到（上面表格第 7、8 行）。
-  这不是插件 bug，而是 Firefox / Konsole 在 AT-SPI 里暴露的内容有限。
+- ✅ **内容级读取（0.1.3 起）**：网页正文通过 `tree-text` 可以读出来。实测用它读
+  `platform.deepseek.com/usage`，一次调用得到 57 行文字，含 `充值余额 ¥5.97`、
+  `API 请求次数 3,920`、`Tokens 546,407,414`。
+- ⚠️ 终端尾部仍有限：Konsole 报告 7181 字符但只提供约 2591。
 
 ### 为什么 0.1.0 开箱用不了
 
@@ -65,6 +67,9 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 
 0.1.2 又修了两处（`kde_uia_activate` 的 `window-op` 报错、所有文本读取返回空字符串），
 并新增 `ydotool` 输入后端：见 [CHANGELOG 0.1.2](dsh-plugin-kde-uia/CHANGELOG.md#012--2026-10-31)。
+
+0.1.3 新增 `tree-text` 操作与 `tree --include_text`：**网页正文现在能读了**，
+见 [CHANGELOG 0.1.3](dsh-plugin-kde-uia/CHANGELOG.md#013--2026-10-31)。
 
 ### 键盘输入：需要 `ydotool`
 

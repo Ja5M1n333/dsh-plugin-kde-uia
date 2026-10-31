@@ -216,6 +216,10 @@ export function buildTools({ defineTool, call, readOnly = false }) {
         depth: { type: 'integer', description: 'Maximum depth (default 4, raise to 6-8 for forms).' },
         max_nodes: { type: 'integer', description: 'Node budget (default 200).' },
         include_extents: { type: 'boolean', description: 'Append on-screen rectangles.' },
+        include_text: {
+          type: 'boolean',
+          description: 'Append each node\'s accessible text. Use it to read a page or dialog without a screenshot; raise max_nodes accordingly.'
+        },
         selector: SELECTOR
       },
       'tree',
@@ -224,6 +228,7 @@ export function buildTools({ defineTool, call, readOnly = false }) {
         depth: a.depth,
         max_nodes: a.max_nodes,
         include_extents: a.include_extents === true,
+        ...(a.include_text === true ? { include_text: true } : {}),
         selector: {
           ...(a.selector ?? {}),
           ...(a.window === undefined ? {} : { window: a.window }),

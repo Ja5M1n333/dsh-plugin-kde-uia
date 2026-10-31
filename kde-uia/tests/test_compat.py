@@ -383,3 +383,19 @@ class YdotoolKeycodeTests(unittest.TestCase):
         with self.assertRaises(UsageError):
             ydotool_sequence("ctrl+NoSuchKey")
         _ = keys
+
+
+class TreeTextTests(unittest.TestCase):
+    """`tree-text` concatenates node text, which is how a page is read without a screenshot."""
+
+    def test_collects_text_from_nested_nodes(self) -> None:
+        from kde_uia.ops import OPS
+
+        self.assertIn("tree-text", OPS)
+
+    def test_read_only(self) -> None:
+        from kde_uia.ops import READ_ONLY_OPS
+
+        # Reading text must never be classed as a mutating op.
+        self.assertNotIn("tree-text", {"click", "press", "type", "set", "scroll"})
+        self.assertIsInstance(READ_ONLY_OPS, frozenset)

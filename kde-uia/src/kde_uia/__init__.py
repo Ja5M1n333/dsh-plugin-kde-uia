@@ -42,7 +42,7 @@ from .refs import ElementRef, make_ref, parse_ref
 from .selector import Selector
 from .session import DesktopSession, Options
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 # Install the Plasma 6 / PyGObject compatibility layer before anything can call
 # the patched modules; see compat.py for the defects it repairs and how to opt

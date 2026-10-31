@@ -958,6 +958,148 @@ def _patch_text() -> None:
 
 
 # --------------------------------------------------------------------------
+# 12. tree/find/info: expose each node's accessible text
+#
+# A web page served by Firefox keeps its content in ``section`` nodes whose
+# text lives behind the Text interface; ``tree`` printed only role and name,
+# so the page body looked empty even though 88 text nodes were readable.  A
+# tree rendered with ``include_text`` now appends every node's text, which is
+# what makes "read the window" possible without a screenshot.
+# --------------------------------------------------------------------------
+def _patch_tree_text() -> None:
+    from . import ops as ops_mod
+    from . import tree as tree_mod
+
+    original_line = tree_mod._line
+
+    def _line(node: Any, depth: int, options: Any) -> str:
+        line = original_line(node, depth, options)
+        if not getattr(options, "include_text", False):
+            return line
+        try:
+            text = node.text().strip()
+        except Exception:
+            text = ""
+        if not text or text == node.name():
+            return line
+        # Collapse newlines so one element stays on one line.
+        text = " / ".join(part.strip() for part in text.splitlines() if part.strip())
+        if not text:
+            return line
+        if len(text) > 240:
+            text = text[:239] + "…"
+        return f"{line}  text={text!r}"
+
+    tree_mod._line = _line
+
+    # ops.tree() builds TreeRenderOptions itself; reproduce it with include_text.
+    def ops_tree(session: Any, args: dict[str, Any]) -> dict[str, Any]:
+        from .selector import Selector
+
+        selector = Selector.from_dict(args.get("selector"))
+        if args.get("window"):
+            selector = Selector.from_dict({**selector.to_dict(), "window": args["window"]})
+        if args.get("app"):
+            selector = Selector.from_dict({**selector.to_dict(), "app": args["app"]})
+        if args.get("ref"):
+            root = session.tree.resolve_ref(str(args["ref"]))
+            window = ops_mod._window_of(session, root)
+        else:
+            info = session.tree.resolve_window(selector)
+            root = info.element
+            window = info.to_dict()
+        options = tree_mod.TreeRenderOptions(
+            max_depth=ops_mod._as_int(args.get("depth", 4), "depth"),
+            max_nodes=ops_mod._as_int(args.get("max_nodes", args.get("maxNodes", 200)), "max_nodes"),
+            include_extents=bool(args.get("include_extents")),
+            include_refs=not bool(args.get("no_refs")),
+            include_text=bool(args.get("include_text") or args.get("includeText")),
+        )
+        rendered = tree_mod.render_tree(session.tree, root, options)
+        return {"window": window, "text": rendered.text, "nodes": rendered.nodes,
+                "truncated": rendered.truncated, "rootRef": root.ref(),
+                "hint": "Re-run with depth>=6 or a ref to see deeper subtrees." if rendered.truncated else None}
+
+    ops_mod.tree = ops_tree
+
+    # Reading every node's text is what makes a page readable without a
+    # screenshot; expose it as its own op because a tree of a web document
+    # hides its content behind lazily-built children.
+    def tree_text(session: Any, args: dict[str, Any]) -> dict[str, Any]:
+        if args.get("ref"):
+            root = session.tree.resolve_ref(str(args["ref"]))
+        elif args.get("selector") or args.get("window") or args.get("app"):
+            from .selector import Selector
+
+            selector = Selector.from_dict(args.get("selector"))
+            for key in ("window", "app"):
+                if args.get(key):
+                    selector = Selector.from_dict({**selector.to_dict(), key: args[key]})
+            root = session.tree.resolve_window(selector).element
+        else:
+            from .errors import UsageError
+
+            raise UsageError("tree-text needs a window, a selector or a ref")
+        limit = ops_mod._as_int(args.get("max_chars", 20000), "max_chars")
+        depth_limit = ops_mod._as_int(args.get("depth", 16), "depth")
+        pieces: list[str] = []
+        seen: set[str] = set()
+        visited = 0
+
+        def walk(element: Any, depth: int) -> None:
+            nonlocal visited
+            if depth > depth_limit or sum(len(p) for p in pieces) >= limit:
+                return
+            visited += 1
+            text = ""
+            try:
+                text = element.text()
+            except Exception:
+                text = ""
+            if not text:
+                try:
+                    text = element.text_or_value()
+                except Exception:
+                    text = ""
+            for line in str(text).splitlines():
+                line = line.strip()
+                if line and set(line) - {"\ufffc"} and line not in seen:
+                    seen.add(line)
+                    pieces.append(line)
+                    break
+            for child in element.children():
+                walk(child, depth + 1)
+
+        walk(root, 0)
+        out: list[str] = []
+        total = 0
+        for piece in pieces:
+            if total + len(piece) > limit:
+                out.append("… (truncated)")
+                break
+            out.append(piece)
+            total += len(piece) + 1
+        return {"text": "\n".join(out), "lines": len(out), "nodes": visited, "truncated": total >= limit}
+
+    ops_mod.tree_text = tree_text
+    if hasattr(ops_mod, "OPS"):
+        ops_mod.OPS["tree-text"] = tree_text
+
+    from . import ops as ops_mod
+
+    original_options = tree_mod.TreeRenderOptions
+    if not getattr(original_options, "_has_text", False):
+        original_init = original_options.__init__
+
+        def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            self.include_text = bool(kwargs.pop("include_text", False))
+            original_init(self, *args, **kwargs)
+
+        original_options.__init__ = __init__
+        original_options._has_text = True
+
+
+# --------------------------------------------------------------------------
 # 10. Synthetic input: Atspi.generate_keyboard_event / generate_mouse_event
 #
 # ``InputService`` only ever tried xdotool (XTest) and kdotool (0.3.0 has no
@@ -1224,7 +1366,7 @@ def install_patches() -> None:
         return
     _INSTALLED = True
     for patch in (_patch_diagnose, _patch_states, _patch_window_backend, _patch_find_roots, _patch_values,
-                  _patch_actions, _patch_screenshots, _patch_refs, _patch_client_registration, _patch_input, _patch_text):
+                  _patch_actions, _patch_screenshots, _patch_refs, _patch_client_registration, _patch_input, _patch_text, _patch_tree_text):
         try:
             patch()
         except Exception:  # noqa: BLE001 - a patch must never break the client

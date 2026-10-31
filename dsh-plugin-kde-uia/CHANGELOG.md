@@ -15,9 +15,40 @@ Wayland session** — see ["Keyboard input: known limit"](#keyboard-input-known-
 
 | Plugin | DSH | Python | Plasma | Primary distro |
 |---|---|---|---|---|
-| 0.1.2 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | **Arch Linux** |
+| 0.1.3 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | **Arch Linux** |
+| 0.1.2 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | Arch Linux |
 | 0.1.1 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | Arch Linux |
 | 0.1.0 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | Arch Linux |
+
+## [0.1.3] — 2026-10-31
+
+Found while using the plugin on a real task: reading the account usage page
+(`platform.deepseek.com/usage`) without a screenshot.
+
+### Added
+
+- **`tree-text` client op.** Reads the accessible text of every node under a
+  window, selector or ref, de-duplicated and depth-limited, and returns it as
+  plain lines. This is the operation that makes "read the window" possible: on
+  the usage page a single call returned 57 lines including `充值余额 ¥5.97`,
+  `累计消费金额 ¥99.27`, `API 请求次数 3,920` and `Tokens 546,407,414`.
+- `kde_uia_tree` gained `include_text: true`, which appends each node's text to
+  its line (web documents keep their content in `section` nodes whose text is
+  invisible to a plain tree).
+
+### What this fixes in practice
+
+A web page's real content is **not** in the `document web` node — that node
+exposes a single placeholder character. It lives in descendant `section`
+nodes, readable only through the Text interface, which 0.1.2 started using but
+no operation surfaced. 0.1.3 surfaces it.
+
+### Notes for future readers of this file
+
+- `document web` alone is never enough to read a page; walk down to `section`.
+- Keyboard input is still subject to the input method: typing a URL with a
+  Chinese IME active produces Chinese characters. Switch to a plain keyboard
+  layout first, or use clipboard paste.
 
 ## [0.1.2] — 2026-10-31
 
