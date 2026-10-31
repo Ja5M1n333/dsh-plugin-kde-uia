@@ -60,6 +60,7 @@ kde-uia windows [--all]            list windows
 kde-uia active-window              the active window
 kde-uia focused                    the element with keyboard focus
 kde-uia tree --window Dolphin [--depth 6] [--max-nodes 300] [--extents]
+kde-uia tree-text --window Firefox [--depth 16] [--max-chars 20000]
 kde-uia find --role push-button --text Save [--window Dolphin] [--match exact] [--state focusable]
 kde-uia info --ref uia:1:kwrite:1/0
 kde-uia activate --window Dolphin [--id 0x3a00007]

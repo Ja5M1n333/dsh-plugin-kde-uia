@@ -1100,6 +1100,85 @@ def _patch_tree_text() -> None:
 
 
 # --------------------------------------------------------------------------
+# 13. CLI: `kde-uia tree-text --window <title>`
+#
+# The op exists for the plugin, but the documented command line had no way to
+# call it, so the handoff instructions pointed at a command that did not run.
+# --------------------------------------------------------------------------
+def _patch_cli_tree_text() -> None:
+    from . import cli as cli_mod
+    from . import ops as ops_mod
+
+    if getattr(cli_mod, "_tree_text_installed", False):
+        return
+
+    original_build = getattr(cli_mod, "build_parser", None)
+    original_dispatch = cli_mod._dispatch
+
+    def _dispatch(ns: Any, session: Any) -> Any:
+        if getattr(ns, "command", "") == "tree-text":
+            from .errors import UsageError
+            from .selector import Selector
+
+            if getattr(ns, "ref", None):
+                root = session.tree.resolve_ref(str(ns.ref))
+            else:
+                bare = Selector.from_dict({})
+                window = getattr(ns, "window", None)
+                app = getattr(ns, "app", None)
+                if not window and not app:
+                    raise UsageError(
+                        "tree-text needs --window, --app or --ref",
+                        hint="Example: kde-uia tree-text --window Firefox",
+                    )
+                root = session.tree.resolve_window(
+                    Selector.from_dict({"window": window, "app": app})
+                ).element
+            args: dict[str, Any] = {"ref": root.ref()}
+            if getattr(ns, "depth", None) is not None:
+                args["depth"] = ns.depth
+            if getattr(ns, "max_chars", None) is not None:
+                args["max_chars"] = ns.max_chars
+            _ = bare
+            return ops_mod.tree_text(session, args)
+        return original_dispatch(ns, session)
+
+    cli_mod._dispatch = _dispatch
+    cli_mod._tree_text_installed = True
+
+    # argparse wiring: add the subcommand if a parser builder is reachable.
+    if callable(original_build):
+        def build(*args: Any, **kwargs: Any) -> Any:
+            parser = original_build(*args, **kwargs)
+            try:
+                subs = [a for a in parser._actions if getattr(a, "choices", None) and "tree" in a.choices]
+                if subs:
+                    subparsers = subs[0].choices["tree"]
+                    new = subs[0].add_parser("tree-text", help="print every node's text under a window/element")
+                    cli_mod._add_selector(new)
+                    new.add_argument("--depth", type=int, default=16, help="maximum depth (default 16)")
+                    new.add_argument("--max-chars", dest="max_chars", type=int, default=20000, help="character budget")
+            except Exception:
+                pass
+            return parser
+
+        cli_mod.build_parser = build
+    _ = original_build
+
+    original_human = getattr(cli_mod, "_human", None)
+    if callable(original_human):
+        def _human(ns: Any, result: Any) -> Any:
+            if getattr(ns, "command", "") == "tree-text" and isinstance(result, dict) and "text" in result:
+                print(result.get("text", ""))
+                if result.get("truncated"):
+                    print("… (truncated; raise --max-chars)")
+                return None
+            return original_human(ns, result)
+
+        cli_mod._human = _human
+
+
+# --------------------------------------------------------------------------
 # 10. Synthetic input: Atspi.generate_keyboard_event / generate_mouse_event
 #
 # ``InputService`` only ever tried xdotool (XTest) and kdotool (0.3.0 has no
@@ -1366,7 +1445,7 @@ def install_patches() -> None:
         return
     _INSTALLED = True
     for patch in (_patch_diagnose, _patch_states, _patch_window_backend, _patch_find_roots, _patch_values,
-                  _patch_actions, _patch_screenshots, _patch_refs, _patch_client_registration, _patch_input, _patch_text, _patch_tree_text):
+                  _patch_actions, _patch_screenshots, _patch_refs, _patch_client_registration, _patch_input, _patch_text, _patch_tree_text, _patch_cli_tree_text):
         try:
             patch()
         except Exception:  # noqa: BLE001 - a patch must never break the client
