@@ -37,13 +37,17 @@ host-key checks. Use `BatchMode=yes` (the plugin always adds it) and proper know
 
 | Capability | Why it exists |
 |---|---|
-| Read window titles, element trees, roles, names, values, states | to locate targets |
+| Read window titles, element trees, roles, names, values, states **and node text** | to locate targets and to read page/dialog content without a screenshot |
 | Click, double-click, scroll | to operate the GUI |
 | Type text, press key combinations | to fill forms and send shortcuts |
 | Activate, move, resize, minimize, close windows | window management |
 | Capture the screen or a window as PNG | visual confirmation for the agent/user |
 
 That is equivalent to a desktop user's keyboard and mouse. It is **not** equivalent to root.
+
+Reading text deserves a note of its own: `tree-text` concatenates the accessible text of every
+node under a window, so it can read whatever the accessibility bus exposes — the same content a
+screen reader would announce, which in a browser includes the page body.
 
 ## What it cannot do (by construction)
 
@@ -59,7 +63,8 @@ That is equivalent to a desktop user's keyboard and mouse. It is **not** equival
 - **No network.** No telemetry, no update checks, no external endpoints. The only outbound
   traffic is the transport you configured (`wsl.exe`, `ssh`).
 - **No device access that needs extra permission.** Reading `/dev/fb0` is documented but never
-  attempted automatically.
+  attempted automatically. The optional `ydotool` backend uses `/dev/uinput`, which you must
+  make writable yourself (ACL or the `input` group); the plugin never changes those permissions.
 - **No silent installation or config edits.** The plugin writes only the files listed under
   *Data handling*.
 
@@ -72,6 +77,7 @@ That is equivalent to a desktop user's keyboard and mouse. It is **not** equival
 | KWin script | installs `~/.local/share/kwin/scripts/kde-uia-window-probe.js` and loads it in the running KWin (user scope, removable by deleting the file) |
 | AT-SPI access | reads the accessibility bus of your own session (no prompt) |
 | Synthetic input | moves the pointer / types in the focused window (the user sees it) |
+| `ydotool` (optional) | **only if you install it**: writes to `/dev/uinput` through a `ydotoold` socket, giving kernel-level keyboard/mouse injection. The plugin detects the socket and prefers it; without it, the previous backends are used unchanged. It does not grant elevation. |
 | Screenshot | captures the screen to a file path you name |
 
 ## Data handling

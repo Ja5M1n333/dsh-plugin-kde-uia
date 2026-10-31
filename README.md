@@ -47,6 +47,18 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 | 网页正文文字 | ✅ 通过 `tree-text` / `tree --include_text` 读取（0.1.3 新增） |
 | 终端内容 | ⚠️ 部分：Konsole 报告 7181 字符，实际只提供约 2591 字符 |
 
+### 怎么用它读一个窗口（不用截图）
+
+```
+kde_uia_windows                                  # 先看有哪些窗口
+kde_uia_find    { "window": "Firefox", "text": "余额" }   # 缩小范围
+kde_uia_tree_text { "window": "Firefox" }        # 读整页文字（0.1.3）
+kde_uia_tree    { "window": "Firefox", "include_text": true }  # 带文本的树
+```
+
+**关键**：不要只读 `document web`，它只有占位符；正文在下级 `section` 节点，
+用 `tree-text` 一次读完。
+
 ### 这个插件的用途，以及它目前能做到哪一步
 
 设计目标很明确：**让 agent 不靠截图、不看 OCR，直接"读"界面结构再按语义操作。** 实测边界：
@@ -57,6 +69,15 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
   `platform.deepseek.com/usage`，一次调用得到 57 行文字，含 `充值余额 ¥5.97`、
   `API 请求次数 3,920`、`Tokens 546,407,414`。
 - ⚠️ 终端尾部仍有限：Konsole 报告 7181 字符但只提供约 2591。
+
+### 四个版本各自修了什么
+
+| 版本 | 修掉的问题 | 怎么发现的 |
+|---|---|---|
+| **0.1.0** | —（从未在真机跑过，**不要使用**） | 按文档编写 |
+| **0.1.1** | 插件从未激活：`Config` 是普通 JSON Schema（加载器要 `~standard.validate`）、`apply()` 返回对象（cordis 当作 setup promise）；另有客户端 10 处缺陷（PyGObject 接口名、KWin 脚本桥不可用、窗口内搜索失效、引用冲突……） | 第一次真机运行 |
+| **0.1.2** | `kde_uia_activate` 恒报 `unknown op 'window-op'`；所有文本读取返回空串；新增 `ydotool` 输入后端 | 第一次由 agent 直接驱动工具 |
+| **0.1.3** | 新增 `tree-text` / `kde_uia_tree_text` / `tree --include_text`，网页正文终于能读 | 真实任务：读余额 |
 
 ### 为什么 0.1.0 开箱用不了
 

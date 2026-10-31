@@ -70,7 +70,8 @@ Failure:
 | `windows` | `{ include_hidden?, selector? }` | `{ windows: [{title, app, role, ref, id?, frame?, active?, source}], count }` |
 | `active-window` | `{}` | `{ active, source, window }` |
 | `focused` | `{}` | element summary + `path` + `value` |
-| `tree` | `{ selector?/window/app/window_id, ref?, depth?, max_nodes?, include_extents? }` | `{ window, text, nodes, truncated, rootRef }` |
+| `tree` | `{ selector?/window/app/window_id, ref?, depth?, max_nodes?, include_extents?, include_text? }` | `{ window, text, nodes, truncated, rootRef }` — `include_text` appends each node's accessible text to its line |
+| `tree-text` | `{ selector?/window/app/ref, depth?, max_chars? }` | `{ text, lines, nodes, truncated }` — plain lines of every node's accessible text; use it to read a page body without a screenshot |
 | `find` | `{ selector }` or `{ refs: [...] }` | `{ ref, found, count, elements: [{ref, role, name, app, window, extents, actions, value}] }` |
 | `info` | `{ selector? , ref? }` | `{ ref, role, name, description, value, states, actions, attributes, interfaces, extents, path, window }` |
 | `activate` | `{ window?, app?, id?, selector? }` | `{ activated, source, window }` |

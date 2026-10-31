@@ -50,20 +50,31 @@
 > In one line: **a small tool a student built on a school computer for personal use —
 > whether and how to use it is best judged by your own situation.**
 
-### Current status: field-tested on a real Plasma 6 desktop (v0.1.2)
+### Current status: field-tested on a real Plasma 6 desktop (v0.1.3)
 
-On 2026-10-31 this plugin ran against a live KDE Plasma 6.8.2 Wayland session for the first
-time. The full environment, raw output, reproduction commands and known failures are in
-[FIELD-TEST.md](../FIELD-TEST.md). Summary:
+On 2026-10-31 this plugin ran against a live KDE Plasma 6.8.2 Wayland session three times,
+each round fixing what the previous one exposed. Full environment, raw output, reproduction
+commands, every version's record and the known failures are in [FIELD-TEST.md](../FIELD-TEST.md).
 
-- ✅ `kde_uia_doctor` passes all six checks; window listing, element trees, `find` and `info` work.
-- ✅ Semantic clicks through accessibility actions work (the widget's `checked` state was read
-  back before and after to confirm the toggle).
-- ✅ Screenshots work (spectacle); window activate / minimize / close / resize work (kdotool,
-  XWayland windows).
-- ✅ **Keyboard input works once `ydotool` runs.** 0.1.2 adds a `ydotool` backend, used
-  automatically when a `ydotoold` socket exists; `echo lag-test-one` reached the terminal
-  verbatim. Without `ydotool`, keys cannot be delivered on native Wayland.
+| Capability | Result |
+|---|---|
+| `kde_uia_doctor` | ✅ all six checks |
+| Windows / trees / `find` / `info` | ✅ |
+| Semantic click via accessibility actions | ✅ (state read back to confirm) |
+| Activate / minimize / close / resize | ✅ (kdotool, XWayland windows) |
+| Screenshots (spectacle) | ✅ |
+| Keyboard / typing | ✅ **when `ydotool` runs** (0.1.2+) |
+| **Reading a page body without a screenshot** | ✅ **`kde_uia_tree_text` (0.1.3)** |
+| Terminal contents | ⚠️ partial: Konsole reports 7181 chars but serves ~2591 |
+
+### Version history, and what each round fixed
+
+| Version | What it fixed | How it was found |
+|---|---|---|
+| **0.1.0** | — (never ran on a real desktop) | written from documentation |
+| **0.1.1** | The plugin never activated: `Config` was a plain JSON Schema (the loader needs `~standard.validate`) and `apply()` returned an object (cordis reads it as a setup promise). Plus ten client defects: PyGObject method names (`get_child_count`, `.states`, `get_n_actions`, `Atspi.Text`), a KWin scripting bridge Plasma 6 cannot drive, scoped searches that never matched, colliding refs, broken spectacle path. | first live run |
+| **0.1.2** | `kde_uia_activate` always failed with `unknown op 'window-op'` (internal sentinel leaked to the client); every text read returned `""` (`acc.get_text(start, end)` is not the PyGObject signature); added the `ydotool` input backend. | first agent-driven run |
+| **0.1.3** | Added `tree-text` / `kde_uia_tree_text` and `tree --include_text`: a page body is **not** in `document web` (one placeholder character), it lives in descendant `section` nodes. One call then read the account usage page: `充值余额 ¥5.97`, `API 请求次数 3,920`, `Tokens 546,407,414`. | real task: read the balance |
 
 ### Why 0.1.0 did not work out of the box (fixed in 0.1.1)
 
@@ -75,21 +86,21 @@ apply automatically when the client is imported; each one is explained in the
 [CHANGELOG](CHANGELOG.md#011--2026-10-31). Set `KDE_UIA_NO_PATCHES=1` to compare against the
 original behaviour.
 
-### Known limit: keyboard input under Wayland
+### Keyboard input under Wayland
 
-Every input path the plugin ships is closed on that machine:
+XTest (`xdotool`) is a no-op under native Wayland, `kdotool` 0.3.0 ships no input commands,
+KWin 6.8.2 does not run scripts, and `Atspi.generate_keyboard_event()` reports success while
+the compositor drops the event. Since 0.1.2 the client detects a `ydotoold` socket and uses
+`ydotool` (kernel-level input) **first**, falling back to AT-SPI and then the old tools. Setup:
 
-- XTest (`xdotool`) is a no-op under native Wayland;
-- `kdotool` 0.3.0 has no `key` / `click` / `type` subcommands;
-- KWin 6.8.2 does not run scripts (`loadScript` returns an id and `isScriptLoaded` says true,
-  yet the script never executes);
-- `Atspi.generate_keyboard_event()` returns success, but KWin drops the event.
+```bash
+yay -S ydotool        # AUR; /dev/uinput must be writable by your user (ACL or `input` group)
+ydotoold --socket-path=$XDG_RUNTIME_DIR/.ydotool_socket --socket-perm=0600
+```
 
-The workable alternatives all need the machine owner's consent, so none is enabled by
-default: **`ydotool`** (AUR, `/dev/uinput`, `input` group plus a running `ydotoold`) or the
-**XDG Remote Desktop portal** (`RemoteDesktop`, which asks you for permission in a dialog).
-Until then, prefer the keyboard-free tools: `kde_uia_click`, `kde_uia_set_value`.
-
+One caveat found in testing: `ydotool` injects raw key codes, so an active IME rewrites the
+letters (a URL typed under a Chinese IME became Chinese characters). Switch to a plain
+keyboard layout first, or paste.
 
 ---
 
@@ -290,7 +301,10 @@ See [docs/tools.md](docs/tools.md) for every tool and CLI command, and
 
 | Package version | DSH runtime | Status |
 |---|---|---|
-| 0.1.0 | `@deepseek-ai/dsh` **0.2.0-rc.2** (Desktop 44 / `primary-runtime` `0.2.0-rc.2`) | developed and tested against |
+| 0.1.3 (current) | `@deepseek-ai/dsh` **0.2.0-rc.2** (Desktop 44 / `primary-runtime` `0.2.0-rc.2`) | field-verified: Plasma 6.8.2 / Wayland / Arch |
+| 0.1.2 | `@deepseek-ai/dsh` **0.2.0-rc.2** | activate + text reads fixed |
+| 0.1.1 | `@deepseek-ai/dsh` **0.2.0-rc.2** | first live run |
+| 0.1.0 | `@deepseek-ai/dsh` **0.2.0-rc.2** | never verified on a desktop — do not use |
 | — | `0.2.0-rc.*` other than rc.2 | expected, not exercised |
 | — | any other version | unsupported; DSH refuses to load incompatible peers |
 

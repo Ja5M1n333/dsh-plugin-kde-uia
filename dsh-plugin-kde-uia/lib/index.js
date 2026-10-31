@@ -157,6 +157,7 @@ export function opFor(toolName) {
     doctor: 'doctor',
     windows: 'windows',
     tree: 'tree',
+    tree_text: 'tree-text',
     find: 'find',
     info: 'info',
     click: 'click',

@@ -15,7 +15,8 @@ Exit codes of the CLI and of `python -m kde_uia ops`: `0` ok, `1` coded failure,
 |---|---|---|
 | `kde_uia_doctor` | capability report (transport, client, AT-SPI, window backend, input, screenshots) | `doctor` |
 | `kde_uia_windows` | list windows from AT-SPI + KWin/X11 (titles, apps, ids, geometry) | `windows` |
-| `kde_uia_tree` | indented element tree of one window/element with roles, names, values, actions, refs | `tree` |
+| `kde_uia_tree` | indented element tree of one window/element with roles, names, values, actions, refs; `include_text: true` appends each node's accessible text | `tree` |
+| `kde_uia_tree_text` | plain lines of every node's accessible text under a window/element — reads a page body or dialog without a screenshot | `tree-text` |
 | `kde_uia_find` | find elements by role/name/text/states/attributes, scoped to a window | `find` |
 | `kde_uia_info` | one element's properties, states, actions, geometry, parent chain | `info` |
 | `kde_uia_click` | click an element (a11y action first, pointer fallback); `dry_run` available | `click` |

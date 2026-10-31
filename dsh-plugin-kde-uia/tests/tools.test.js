@@ -156,3 +156,21 @@ test('window-op resolves to a real client operation', () => {
   // Every other tool op is passed through untouched.
   assert.deepEqual(windowOp('tree', { ref: 'r' }), { op: 'tree', args: { ref: 'r' } })
 })
+
+test('kde_uia_tree_text routes to the tree-text op', async () => {
+  // Reading a page body without a screenshot: the tool must reach the client
+  // op that concatenates node text, and pass window/ref through.
+  let seen
+  const record = buildTools({
+    defineTool,
+    call: async (op, args) => { seen = { op, args }; return { text: 'line one\nline two', lines: 2 } }
+  })
+  const tool = record.find((entry) => entry.name === 'kde_uia_tree_text')
+  assert.ok(tool, 'kde_uia_tree_text must be registered')
+  const value = await tool.execute({ window: 'Firefox', max_chars: 500 })
+  assert.equal(seen.op, 'tree-text')
+  assert.equal(seen.args.window, 'Firefox')
+  assert.equal(seen.args.max_chars, 500)
+  // execute() returns the client value; output.render turns it into model text.
+  assert.equal(value.text, 'line one\nline two')
+})

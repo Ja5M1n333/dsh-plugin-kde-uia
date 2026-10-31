@@ -242,6 +242,28 @@ export function buildTools({ defineTool, call, readOnly = false }) {
       }
     ),
     tool(
+      'tree_text',
+      'Read every accessible text line under a window (or an element ref), without a screenshot. Use this to read a web page body, a dialog or a document: the text of `document web` itself is a placeholder, the content lives in descendant nodes. Read-only.',
+      {
+        window: { type: 'string', description: 'Window title (substring).' },
+        app: { type: 'string', description: 'Application name (substring).' },
+        ref: { ...REF, description: 'Start from this element instead of a whole window.' },
+        selector: SELECTOR,
+        depth: { type: 'integer', description: 'Maximum depth (default 16).' },
+        max_chars: { type: 'integer', description: 'Character budget (default 20000).' }
+      },
+      'tree-text',
+      (a) => ({
+        ...(a.ref === undefined ? {} : { ref: a.ref }),
+        ...(a.depth === undefined ? {} : { depth: a.depth }),
+        ...(a.max_chars === undefined ? {} : { max_chars: a.max_chars }),
+        ...(a.selector === undefined ? {} : { selector: a.selector }),
+        ...(a.window === undefined ? {} : { window: a.window }),
+        ...(a.app === undefined ? {} : { app: a.app })
+      }),
+      (v) => `${v?.text ?? ''}${v?.truncated ? '\n… (truncated; raise max_chars)' : ''}`
+    ),
+    tool(
       'find',
       'Find elements matching role/name/text/states, optionally scoped to one window. Returns `uia:` refs plus geometry. Read-only. Prefer role+text over coordinates: refs survive geometry changes but not widget insertions.',
       {

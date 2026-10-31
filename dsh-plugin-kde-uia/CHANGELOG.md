@@ -43,6 +43,19 @@ exposes a single placeholder character. It lives in descendant `section`
 nodes, readable only through the Text interface, which 0.1.2 started using but
 no operation surfaced. 0.1.3 surfaces it.
 
+### Documentation caught up with the code
+
+- [FIELD-TEST.md](../FIELD-TEST.md) now records **every round and every version** (0.1.0 through
+  0.1.3) in order, with the raw observations, the fix each round produced and the mistakes made
+  along the way (`document web` is never the page body; an active IME rewrites typed URLs;
+  a successful return value does not prove delivery).
+- `kde_uia_tree_text` is now a registered tool, not just a client op: `docs/tools.md`,
+  `docs/protocol.md` and `lib/index.js` all list it, and a routing test covers it.
+- `SECURITY.md` documents the optional `ydotool` backend (`/dev/uinput`) and what reading text
+  through `tree-text` means.
+- Both plugin READMEs and the root README carry a per-version table and the compatibility table
+  now names 0.1.1–0.1.3 with their real verification state (0.1.0 is marked "do not use").
+
 ### Notes for future readers of this file
 
 - `document web` alone is never enough to read a page; walk down to `section`.

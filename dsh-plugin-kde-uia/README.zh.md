@@ -38,16 +38,30 @@
 
 > 一句话：**这是一个学生用学校电脑给自己做的小工具，用不用、怎么用，还是请你按自己的情况来判断。**
 
-### 目前的状态：已在真实的 KDE Plasma 6 上跑过（v0.1.2）
+### 目前的状态：已在真实的 KDE Plasma 6 上跑过（v0.1.3）
 
-2026-10-31，这个插件在真实的 Plasma 6.8.2 + Wayland 桌面上跑通（0.1.1），第二轮由 agent 直接驱动工具的测试又修掉两处缺陷（0.1.2）。
-完整环境、原始输出、复现命令和未通过项见仓库根目录的 [FIELD-TEST.md](../FIELD-TEST.md)。摘要：
+2026-10-31，这个插件在真实的 Plasma 6.8.2 + Wayland 桌面上跑了三轮，每一轮都修掉上一轮暴露的问题。
+完整环境、原始输出、复现命令、**每个版本的完整记录**和未通过项见仓库根目录的 [FIELD-TEST.md](../FIELD-TEST.md)。
 
-- ✅ `kde_uia_doctor` 六项全过；窗口列表、元素树、`find`、`info` 可用。
-- ✅ 按无障碍动作的语义点击可用（点击后回读控件的 `checked` 状态确认真的切换了）。
-- ✅ 截图可用（spectacle）；窗口激活 / 最小化 / 关闭 / 缩放可用（kdotool，XWayland 窗口）。
-- ✅ **键盘输入（`kde_uia_keys` / `kde_uia_type`）在装了 `ydotool` 之后可用**：`echo lag-test-one` 逐字送达并执行成功。
-  没装 `ydotool` 时仍然不可用，原因与替代方案见下。
+| 能力 | 真机结果 |
+|---|---|
+| `kde_uia_doctor` 六项检查 | ✅ 全部通过 |
+| 窗口列表 / 元素树 / `find` / `info` | ✅ 通过 |
+| 按无障碍动作语义点击 | ✅ 通过（点击后回读 `checked` 状态确认） |
+| 窗口激活 / 最小化 / 关闭 / 缩放 | ✅ 通过（kdotool，XWayland 窗口） |
+| 截图（spectacle） | ✅ 通过 |
+| 键盘输入（`kde_uia_keys` / `kde_uia_type`） | ✅ 通过，**需 `ydotool`**（0.1.2+） |
+| **不用截图读出网页正文** | ✅ 通过，**`kde_uia_tree_text`（0.1.3）** |
+| 终端内容 | ⚠️ 部分：Konsole 报告 7181 字符，实际只提供约 2591 |
+
+### 版本历次修了什么
+
+| 版本 | 修掉的问题 | 怎么发现的 |
+|---|---|---|
+| **0.1.0** | —（从未在真机跑过） | 按文档编写 |
+| **0.1.1** | 插件从未激活：`Config` 是普通 JSON Schema（加载器要 `~standard.validate`），`apply()` 返回了对象（cordis 当作 setup promise）。另有客户端 10 处缺陷：PyGObject 接口名（`get_child_count`、`.states`、`get_n_actions`、`Atspi.Text`）、Plasma 6 用不了的 KWin 脚本桥、窗口内搜索永远搜不到、引用冲突、spectacle 路径参数错。 | 第一次真机运行 |
+| **0.1.2** | `kde_uia_activate` 恒报 `unknown op 'window-op'`（内部哨兵值泄漏给客户端）；所有文本读取返回空字符串（`acc.get_text(start, end)` 不是 PyGObject 的签名）；新增 `ydotool` 输入后端。 | 第一次由 agent 直接驱动工具 |
+| **0.1.3** | 新增 `tree-text` / `kde_uia_tree_text` 与 `tree --include_text`：网页正文**不在** `document web` 里（只有一个占位符），而在下级 `section` 节点。一次调用读出用量页：`充值余额 ¥5.97`、`API 请求次数 3,920`、`Tokens 546,407,414`。 | 真实任务：读余额 |
 
 ### 为什么 0.1.0 不能直接用（v0.1.1 已修）
 
@@ -56,19 +70,29 @@
 这些修复集中在 `kde-uia/src/kde_uia/compat.py`，导入客户端时自动生效，逐条说明见
 [CHANGELOG](CHANGELOG.md#011--2026-10-31)。若想对照原始行为，设 `KDE_UIA_NO_PATCHES=1` 关闭补丁层。
 
-### 键盘输入的已知限制
+### 键盘输入：需要 `ydotool`
 
-在这台机器上，插件所有输入路径都被系统挡住了：
+原生 Wayland 下：XTest（`xdotool`）无效、`kdotool` 0.3.0 没有输入子命令、KWin 6.8.2 不执行脚本、
+`Atspi.generate_keyboard_event()` 返回成功但事件被丢弃。
 
-- XTest（`xdotool`）在原生 Wayland 下是空操作；
-- `kdotool` 0.3.0 没有 `key` / `click` / `type` 子命令；
-- KWin 6.8.2 不执行脚本（`loadScript` 返回 id、`isScriptLoaded` 为 true，脚本却从不运行）；
-- `Atspi.generate_keyboard_event()` 返回成功，但 KWin 丢弃了事件。
+0.1.2 起，检测到 `ydotoold` 时**自动**把 `ydotool`（内核级输入）作为首选后端，再回退到 AT-SPI 与旧工具：
 
-0.1.2 起，检测到 `ydotoold` 时**自动**把 `ydotool` 作为首选输入后端（AUR，`/dev/uinput` 需当前用户可写，
-常驻 `ydotoold`）；没有守护进程时保持原行为。另一个选择是 **XDG 远程桌面门户**（`RemoteDesktop`，弹窗授权）。
-在它们接入之前，建议用 `kde_uia_click`、`kde_uia_set_value` 这类不依赖键盘的操作。
+```bash
+yay -S ydotool        # AUR；/dev/uinput 需当前用户可写（ACL 或 input 组）
+ydotoold --socket-path=$XDG_RUNTIME_DIR/.ydotool_socket --socket-perm=0600
+```
 
+实测注意：`ydotool` 注入的是原始键码，**输入法会改写字母**（拼音激活时敲 URL 会变汉字）。
+先切到英文键盘布局，或改用粘贴。
+
+### 读取网页正文（0.1.3）
+
+```
+kde_uia_tree_text { "window": "Firefox" }      # 一次调用返回整页文本
+kde_uia_tree { "window": "Firefox", "include_text": true }
+```
+
+**不要只读 `document web`**：它只有一个占位字符，正文在其下级的 `section` 节点里。
 
 ---
 
@@ -264,7 +288,10 @@ node dsh-plugin-kde-uia/lib/cli.js call kde_uia_find --json '{"text":"Save","win
 
 | 插件版本 | DSH 运行时 | 状态 |
 |---|---|---|
-| 0.1.0 | `@deepseek-ai/dsh` **0.2.0-rc.2**（Desktop 44 / `primary-runtime` `0.2.0-rc.2`） | 针对该版本开发与测试 |
+| 0.1.3（当前） | `@deepseek-ai/dsh` **0.2.0-rc.2**（Desktop 44 / `primary-runtime` `0.2.0-rc.2`） | 真机验证：Plasma 6.8.2 / Wayland / Arch |
+| 0.1.2 | `@deepseek-ai/dsh` **0.2.0-rc.2** | 同上，修复 activate 与文本读取 |
+| 0.1.1 | `@deepseek-ai/dsh` **0.2.0-rc.2** | 首次真机跑通 |
+| 0.1.0 | `@deepseek-ai/dsh` **0.2.0-rc.2** | 从未在真机验证，**建议不要使用** |
 | — | 其他 `0.2.0-rc.*` | 预期可用，未逐版本验证 |
 | — | 其他版本 | 不支持；DSH 会拒绝加载不兼容的 peer |
 
