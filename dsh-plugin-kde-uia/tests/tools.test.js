@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { buildTools, MUTATING_TOOLS, TOOL_PREFIX } from '../lib/tools.js'
+import { buildTools, MUTATING_TOOLS, TOOL_PREFIX, windowOp } from '../lib/tools.js'
 import { loadDefineTool } from './helpers/dsh-tools.js'
 
 const { defineTool, kind } = await loadDefineTool()
@@ -102,13 +102,16 @@ test('each tool routes to its client op and maps arguments', async () => {
   await run('kde_uia_activate', { window: 'Dolphin', action: 'activate' })
   await run('kde_uia_activate', { window: 'Dolphin', action: 'close' })
   const ops = calls.map(([op]) => op)
-  assert.deepEqual(ops, ['windows', 'tree', 'find', 'click', 'press', 'type', 'set', 'scroll', 'wait', 'screenshot', 'window-op', 'window-op'])
+  assert.deepEqual(ops, ['windows', 'tree', 'find', 'click', 'press', 'type', 'set', 'scroll', 'wait', 'screenshot', 'activate', 'window'])
   assert.equal(calls[2][1].selector.role, 'push button')
   assert.equal(calls[1][1].depth, 6)
   assert.equal(calls[8][1].for, 'element')
-  // `window-op` is split by the plugin: activate -> activate, close -> window close.
-  assert.equal(calls[10][1].action, 'activate')
-  assert.equal(calls[11][1].action, 'close')
+  // `kde_uia_activate` reaches the client as `activate` or `window` with its
+  // own `op`; the `window-op` sentinel must never travel to the client.
+  assert.equal(calls[10][1].window, 'Dolphin')
+  assert.equal(calls[10][1].id, undefined)
+  assert.equal(calls[11][1].op, 'close')
+  assert.equal(calls[11][1].window, 'Dolphin')
 })
 
 test('actionable kinds map to AT-SPI roles', async () => {
@@ -131,4 +134,25 @@ test('presentCall names the operation for UIs', () => {
   assert.equal(call.title, 'kde-uia click')
   assert.equal(call.kind, 'other')
   assert.equal(byName.kde_uia_doctor.presentCall({}).kind, 'search')
+})
+
+test('window-op resolves to a real client operation', () => {
+  // 0.1.0 sent the sentinel verbatim: every kde_uia_activate call failed with
+  // "unknown op 'window-op'".
+  assert.deepEqual(windowOp('window-op', { action: 'activate', id: 'w' }), {
+    op: 'activate',
+    args: { window: undefined, app: undefined, id: 'w' }
+  })
+  assert.deepEqual(windowOp('window-op', { action: 'close', id: 'w' }).op, 'window')
+  assert.equal(windowOp('window-op', { action: 'close', id: 'w' }).args.op, 'close')
+  assert.deepEqual(windowOp('window-op', { action: 'resize', id: 'w', width: 800, height: 600 }).args, {
+    window: undefined,
+    app: undefined,
+    id: 'w',
+    op: 'resize',
+    width: 800,
+    height: 600
+  })
+  // Every other tool op is passed through untouched.
+  assert.deepEqual(windowOp('tree', { ref: 'r' }), { op: 'tree', args: { ref: 'r' } })
 })

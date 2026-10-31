@@ -75,6 +75,7 @@ from pathlib import Path
 from typing import Any
 
 from . import env as env_mod
+from . import keys as keys_mod
 from .errors import BackendUnavailableError, KdeUiaError, NoDisplayError, NotFoundError, UsageError
 
 _INSTALLED = False
@@ -714,6 +715,248 @@ def _patch_screenshots() -> None:
     shot.ScreenshotService._import = import_
 
 
+#: X keysym name -> Linux input-event key code (linux/input-event-codes.h),
+#: used by the ``ydotool`` backend, which speaks raw key codes.
+X11_TO_KEYCODE: dict[str, int] = {
+    "0": 11,
+    "1": 2,
+    "2": 3,
+    "3": 4,
+    "4": 5,
+    "5": 6,
+    "6": 7,
+    "7": 8,
+    "8": 9,
+    "9": 10,
+    "Alt_L": 56,
+    "Alt_R": 100,
+    "BackSpace": 14,
+    "Caps_Lock": 58,
+    "Control_L": 29,
+    "Control_R": 97,
+    "Delete": 111,
+    "Down": 108,
+    "End": 107,
+    "Escape": 1,
+    "F1": 59,
+    "F10": 68,
+    "F11": 87,
+    "F12": 88,
+    "F2": 60,
+    "F3": 61,
+    "F4": 62,
+    "F5": 63,
+    "F6": 64,
+    "F7": 65,
+    "F8": 66,
+    "F9": 67,
+    "Home": 102,
+    "Insert": 110,
+    "KP_0": 82,
+    "KP_1": 79,
+    "KP_2": 80,
+    "KP_3": 81,
+    "KP_4": 75,
+    "KP_5": 76,
+    "KP_6": 77,
+    "KP_7": 71,
+    "KP_8": 72,
+    "KP_9": 73,
+    "KP_Add": 78,
+    "KP_Decimal": 83,
+    "KP_Divide": 98,
+    "KP_Enter": 96,
+    "KP_Multiply": 55,
+    "KP_Subtract": 74,
+    "Left": 105,
+    "Menu": 139,
+    "Next": 109,
+    "Num_Lock": 69,
+    "Prior": 104,
+    "Return": 28,
+    "Right": 106,
+    "Scroll_Lock": 70,
+    "Shift_L": 42,
+    "Shift_R": 54,
+    "Super_L": 125,
+    "Super_R": 126,
+    "Tab": 15,
+    "Up": 103,
+    "XF86Copy": 136,
+    "XF86Cut": 135,
+    "XF86Paste": 137,
+    "XF86Search": 225,
+    "a": 30,
+    "ampersand": 8,
+    "apostrophe": 40,
+    "asciicircum": 7,
+    "asciitilde": 41,
+    "asterisk": 9,
+    "at": 3,
+    "b": 48,
+    "backslash": 43,
+    "bar": 43,
+    "braceleft": 26,
+    "braceright": 27,
+    "bracketleft": 26,
+    "bracketright": 27,
+    "c": 46,
+    "colon": 39,
+    "comma": 51,
+    "d": 32,
+    "dollar": 5,
+    "e": 18,
+    "equal": 13,
+    "exclam": 2,
+    "f": 33,
+    "g": 34,
+    "grave": 41,
+    "greater": 52,
+    "h": 35,
+    "i": 23,
+    "j": 36,
+    "k": 37,
+    "l": 38,
+    "less": 51,
+    "m": 50,
+    "minus": 12,
+    "n": 49,
+    "numbersign": 4,
+    "o": 24,
+    "p": 25,
+    "parenleft": 10,
+    "parenright": 11,
+    "percent": 6,
+    "period": 52,
+    "plus": 13,
+    "q": 16,
+    "question": 53,
+    "quotedbl": 40,
+    "r": 19,
+    "s": 31,
+    "semicolon": 39,
+    "slash": 53,
+    "space": 57,
+    "t": 20,
+    "u": 22,
+    "underscore": 12,
+    "v": 47,
+    "w": 17,
+    "x": 45,
+    "y": 21,
+    "z": 44,
+}
+
+#: Modifier keysym -> its key code (left-hand variant).
+MODIFIER_KEYCODES: dict[str, int] = {
+    "CTRL": 29,
+    "SHIFT": 42,
+    "ALT": 56,
+    "SUPER": 125,
+    "HYPER": 125,
+}
+
+
+def keycode_for(keysym: str) -> int | None:
+    """Key code for an X keysym name; ``None`` when this table does not know it."""
+    direct = X11_TO_KEYCODE.get(keysym)
+    if direct is not None:
+        return direct
+    if len(keysym) == 1:
+        lowered = keysym.lower()
+        if lowered.isascii() and lowered.isalpha():
+            return X11_TO_KEYCODE.get(lowered)
+        if keysym.isdigit():
+            return X11_TO_KEYCODE.get(keysym)
+    return None
+
+
+def ydotool_sequence(combo: str) -> list[str]:
+    """``CTRL+Shift+t`` -> ``["29:1", "42:1", "20:1", "20:0", "42:0", "29:0"]``.
+
+    Raises :class:`UsageError` when a key has no key code, so the caller can
+    fall through to another backend instead of sending a wrong event.
+    """
+    modifiers, key = keys_mod.parse_combo(combo)
+    codes: list[int] = []
+    for modifier in modifiers:
+        code = MODIFIER_KEYCODES.get(modifier)
+        if code is None:
+            raise UsageError(f"{modifier} has no ydotool key code")
+        codes.append(code)
+    final = keycode_for(key)
+    if final is None:
+        raise UsageError(f"key {key!r} has no ydotool key code")
+    events = [f"{code}:1" for code in codes] + [f"{final}:1", f"{final}:0"]
+    events += [f"{code}:0" for code in reversed(codes)]
+    return events
+
+
+# --------------------------------------------------------------------------
+# 11. Text: PyGObject exposes the Text interface as ``Atspi.Text``
+#
+# ``TextCapability`` called ``self._a.get_text(start, end)``; in PyGObject the
+# accessor's ``get_text()`` takes no arguments and returns the accessible
+# again, while the real reader is ``Atspi.Text.get_text(accessible, start,
+# end)``.  Every read therefore came back empty — including a terminal's
+# contents, which is how output can be verified without a screenshot.
+# --------------------------------------------------------------------------
+def _patch_text() -> None:
+    from . import element
+
+    def _getter(accessor: Any, name: str) -> Any:
+        """The Text-interface callable for ``name`` (accessor method or namespace)."""
+        from .atspi_client import Atspi
+
+        module = Atspi.get().Atspi
+        holder = getattr(module, "Text", None)
+        if holder is not None:
+            fn = getattr(holder, name, None)
+            if callable(fn):
+                return lambda *args: fn(accessor, *args)
+        fn = getattr(accessor, name, None)
+        return fn if callable(fn) else None
+
+    def character_count(self: Any) -> int:
+        fn = _getter(self._a, "get_character_count")
+        if fn is None:
+            return 0
+        try:
+            return int(fn() or 0)
+        except Exception:
+            return 0
+
+    def text(self: Any, start: int = 0, end: int = -1) -> str:
+        count = character_count(self)
+        if end is None or end < 0 or end > count:
+            end = count
+        fn = _getter(self._a, "get_text")
+        if fn is None:
+            return ""
+        try:
+            value = fn(start, end)
+        except Exception:
+            return ""
+        text = value if isinstance(value, str) else ""
+        if text:
+            return text
+        # Konsole serves an empty slice for large ranges; walk backwards from
+        # the end in smaller chunks until some text comes back.
+        tail_start = max(start, end - 4000)
+        while tail_start >= start:
+            try:
+                chunk = fn(tail_start, end)
+            except Exception:
+                return ""
+            if isinstance(chunk, str) and chunk:
+                return chunk
+            tail_start -= 4000
+        return ""
+
+    element.TextCapability.character_count = character_count
+    element.TextCapability.text = text
+
+
 # --------------------------------------------------------------------------
 # 10. Synthetic input: Atspi.generate_keyboard_event / generate_mouse_event
 #
@@ -806,15 +1049,65 @@ def _patch_input() -> None:
             module.generate_mouse_event(x, y, f"b{wheel}r")
             pause()
 
+    def ydotool_socket() -> str:
+        """The ydotoold socket, or '' when no daemon is reachable."""
+        configured = os.environ.get("YDOTOOL_SOCKET")
+        if configured:
+            return configured
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+        candidate = os.path.join(runtime_dir, ".ydotool_socket")
+        return candidate if os.path.exists(candidate) else ""
+
+    def ydotool_available() -> bool:
+        return shutil.which("ydotool") is not None and bool(ydotool_socket())
+
+    def ydotool_key(combo: str, repeat: int) -> None:
+        """Press a combination through ydotoold (kernel-level input injection)."""
+        socket_path = ydotool_socket()
+        if not socket_path:
+            raise inp.BackendUnavailableError(
+                "no ydotoold socket", hint="Start it: ydotoold --socket-path=$XDG_RUNTIME_DIR/.ydotool_socket"
+            )
+        sequence = ydotool_sequence(combo)
+        for _ in range(max(1, repeat)):
+            proc = inp._run([shutil.which("ydotool"), "key", *sequence], timeout=10)
+            if proc.returncode != 0:
+                raise inp.InputError(f"ydotool key failed: {(proc.stderr or proc.stdout).strip()}")
+
+    def ydotool_type(text: str, interval_ms: int) -> None:
+        """Type text through ydotoold (layout-aware, unlike synthetic keysyms)."""
+        socket_path = ydotool_socket()
+        if not socket_path:
+            raise inp.BackendUnavailableError("no ydotoold socket")
+        # -d: delay between keys; -H: how long each key is held. Fast defaults
+        # drop characters when the focused client is busy, so keep both wider.
+        proc = inp._run(
+            [shutil.which("ydotool"), "type", "-d", str(max(interval_ms, 40)), "-H", "40", "--", text],
+            timeout=max(30.0, len(text) / 10),
+        )
+        if proc.returncode != 0:
+            raise inp.InputError(f"ydotool type failed: {(proc.stderr or proc.stdout).strip()}")
+
+    def ydotool_click(x: int, y: int, button: str, clicks: int) -> None:
+        tool = shutil.which("ydotool")
+        inp._run([tool, "mousemove", "--absolute", "-x", str(x), "-y", str(y)], timeout=5)
+        code = {"left": 0xC0, "right": 0xC1, "middle": 0xC2}.get(button, 0xC0)
+        for _ in range(max(1, clicks)):
+            proc = inp._run([tool, "click", f"{code & 0xFF:02x}"], timeout=5)
+            if proc.returncode != 0:
+                raise inp.InputError(f"ydotool click failed: {(proc.stderr or proc.stdout).strip()}")
+
     original_key_order = inp.InputService._key_order
 
-    # 1. Keys: AT-SPI first, then xdotool / kdotool for sessions where
-    #    libatspi is not delivering events.
+    # 1. Keys: ydotool (kernel input, always delivered) first when its daemon
+    #    runs, then AT-SPI, then xdotool / kdotool.  Environments without
+    #    ydotoold keep the previous order unchanged.
     def key_order(self: Any) -> list[str]:
         if self.strategy != "auto":
             return [self.strategy]
-        order = [name for name in original_key_order(self) if name != "atspi"]
-        return ["atspi", *order]
+        order = [name for name in original_key_order(self) if name not in ("atspi", "ydotool")]
+        preferred = ["ydotool"] if ydotool_available() else []
+        return [*preferred, "atspi", *order]
 
     # 2. Keys dispatch through the same order.
     def press(self: Any, combo: str, *, repeat: int = 1) -> Any:
@@ -827,7 +1120,9 @@ def _patch_input() -> None:
         errors: list[str] = []
         for backend in key_order(self):
             try:
-                if backend == "atspi":
+                if backend == "ydotool":
+                    ydotool_key(combo, repeat)
+                elif backend == "atspi":
                     atspi_key(combo, repeat)
                 elif backend == "xdotool":
                     inp._xdotool_key(combo, repeat)
@@ -844,6 +1139,14 @@ def _patch_input() -> None:
                  "at-spi2-core and a compositor that accepts it.",
         )
 
+    original_pointer_order = inp.InputService._pointer_order
+
+    def pointer_order(self: Any) -> list[str]:
+        if self.strategy != "auto":
+            return [self.strategy]
+        order = [name for name in original_pointer_order(self) if name != "ydotool"]
+        return (["ydotool"] if ydotool_available() else []) + order
+
     # 3. Pointer clicks: the element's own action first, then synthetic
     #    pointer events at its centre, then the tool fallbacks.
     def click(self: Any, x: int, y: int, *, button: str = "left", clicks: int = 1, element: Any = None) -> Any:
@@ -858,7 +1161,10 @@ def _patch_input() -> None:
             return inp.InputResult("atspi", "click", {"x": x, "y": y, "button": button, "clicks": clicks})
         except KdeUiaError as exc:
             errors.append(f"atspi: {exc.message}")
-        for backend, function in (("xdotool", inp._xdotool_click), ("kdotool", inp._kdotool_click)):
+        for backend, function in (("ydotool", ydotool_click), ("xdotool", inp._xdotool_click),
+                                  ("kdotool", inp._kdotool_click)):
+            if backend == "ydotool" and not ydotool_available():
+                continue
             try:
                 function(x, y, button, clicks)
                 return inp.InputResult(backend, "click", {"x": x, "y": y, "button": button, "clicks": clicks})
@@ -878,6 +1184,14 @@ def _patch_input() -> None:
             if submit:
                 press(self, "Return")
             return inp.InputResult("atspi", "type", {"text": inp._preview(text)})
+        if ydotool_available():
+            try:
+                ydotool_type(text, interval_ms)
+                if submit:
+                    press(self, "Return")
+                return inp.InputResult("ydotool", "type", {"text": inp._preview(text)})
+            except KdeUiaError as exc:
+                errors.append(f"ydotool: {exc.message}")
         try:
             atspi_type(text, interval_ms)
             if submit:
@@ -896,6 +1210,7 @@ def _patch_input() -> None:
         raise inp.InputError("no text backend could type: " + "; ".join(errors))
 
     inp.InputService._key_order = key_order
+    inp.InputService._pointer_order = pointer_order
     inp.InputService.press = press
     inp.InputService.click = click
     inp.InputService.type_text = type_text
@@ -909,7 +1224,7 @@ def install_patches() -> None:
         return
     _INSTALLED = True
     for patch in (_patch_diagnose, _patch_states, _patch_window_backend, _patch_find_roots, _patch_values,
-                  _patch_actions, _patch_screenshots, _patch_refs, _patch_client_registration, _patch_input):
+                  _patch_actions, _patch_screenshots, _patch_refs, _patch_client_registration, _patch_input, _patch_text):
         try:
             patch()
         except Exception:  # noqa: BLE001 - a patch must never break the client

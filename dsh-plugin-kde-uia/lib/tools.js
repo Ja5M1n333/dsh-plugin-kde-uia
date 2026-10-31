@@ -97,6 +97,29 @@ function summaryLine(value) {
  * @param {boolean} [options.readOnly] - when true, mutating tools are not registered
  * @returns {Array<object>} tool definitions
  */
+/**
+ * Map the `window-op` sentinel onto the client's real operations: `activate`
+ * for the default action, `window` (with `op`) for the rest. Every other tool
+ * op passes through untouched.
+ */
+export function windowOp(op, args) {
+  if (op !== 'window-op') return { op, args }
+  const action = args?.action ?? 'activate'
+  const common = { window: args?.window, app: args?.app, id: args?.id }
+  if (action === 'activate') return { op: 'activate', args: common }
+  return {
+    op: 'window',
+    args: {
+      ...common,
+      op: action,
+      ...(args?.x === undefined ? {} : { x: args.x }),
+      ...(args?.y === undefined ? {} : { y: args.y }),
+      ...(args?.width === undefined ? {} : { width: args.width }),
+      ...(args?.height === undefined ? {} : { height: args.height })
+    }
+  }
+}
+
 export function buildTools({ defineTool, call, readOnly = false }) {
   /** Wrap an op with the standard renderer and error contract. */
   const tool = (name, description, parameters, op, mapArgs, render, flags = {}) => {
@@ -116,7 +139,12 @@ export function buildTools({ defineTool, call, readOnly = false }) {
           throw new Error(`kde_uia_${name} is disabled: this deployment configured readOnly: true`)
         }
         try {
-          const value = await call(op, mapArgs(args), exec)
+          // `window-op` is not a client operation: it resolves to `activate`
+          // or `window` (0.1.0 sent the sentinel verbatim and every window
+          // action failed with "unknown op 'window-op'").
+          const args_ = mapArgs(args)
+          const planned = windowOp(op, args_)
+          const value = await call(planned.op, planned.args, exec)
           return value
         } catch (error) {
         // Errors become `Error: <message>` results, like every built-in tool.

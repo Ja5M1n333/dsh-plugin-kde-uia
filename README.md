@@ -31,7 +31,7 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 
 装好后 agent 就能调用 `kde_uia_windows`、`kde_uia_tree`、`kde_uia_click` 等工具。
 
-## 状态（v0.1.1，首次真机验证之后）
+## 状态（v0.1.2，两轮真机验证之后）
 
 **已经在真实的 KDE Plasma 6.8.2 + Wayland 桌面上跑过。** 完整环境、原始输出和未通过项见
 **[FIELD-TEST.md](FIELD-TEST.md)**。
@@ -41,9 +41,20 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 | `kde_uia_doctor` 六项检查 | ✅ 全部通过 |
 | 窗口列表 / 元素树 / `find` / `info` | ✅ 通过 |
 | 按无障碍动作语义点击 | ✅ 通过（回读状态确认切换） |
+| 窗口激活 / 最小化 / 关闭 / 缩放 | ✅ 通过（0.1.2 修掉了 `window-op` 报错） |
 | 截图（spectacle） | ✅ 通过 |
-| 窗口激活 / 最小化 / 关闭 / 缩放 | ✅ 通过（kdotool，仅 XWayland 窗口） |
-| **键盘输入（`kde_uia_keys` / `kde_uia_type`）** | ❌ **不可用**：接口返回成功，但事件未送达应用 |
+| **键盘输入（`kde_uia_keys` / `kde_uia_type`）** | ✅ 通过，**前提是装了 `ydotool`**（见下） |
+| 网页正文文字 | ❌ 读不到：Firefox 经 `document web` 只暴露 4 个占位符 |
+| 终端内容 | ⚠️ 部分：Konsole 报告 7181 字符，实际只提供约 2591 字符 |
+
+### 这个插件的用途，以及它目前能做到哪一步
+
+设计目标很明确：**让 agent 不靠截图、不看 OCR，直接"读"界面结构再按语义操作。** 实测边界：
+
+- ✅ **结构级读取完全可用**：窗口、工具栏、按钮、菜单、标签页（连"42封未读"都在）、对话框、
+  页面骨架（`article` / `heading` / `paragraph` / `list`）都是结构化文本。
+- ⚠️ **内容级读取有缺口**：网页正文和终端尾部拿不到（上面表格第 7、8 行）。
+  这不是插件 bug，而是 Firefox / Konsole 在 AT-SPI 里暴露的内容有限。
 
 ### 为什么 0.1.0 开箱用不了
 
@@ -52,18 +63,34 @@ dsh plugin --profile desktop add file:<本仓库的绝对路径>/dsh-plugin-kde-
 0.1.1 把它们集中修在 `kde-uia/src/kde_uia/compat.py`，随包自动生效，逐条说明见
 [CHANGELOG](dsh-plugin-kde-uia/CHANGELOG.md#011--2026-10-31)。
 
-### 键盘输入的已知限制（未解决）
+0.1.2 又修了两处（`kde_uia_activate` 的 `window-op` 报错、所有文本读取返回空字符串），
+并新增 `ydotool` 输入后端：见 [CHANGELOG 0.1.2](dsh-plugin-kde-uia/CHANGELOG.md#012--2026-10-31)。
 
-在「原生 Wayland + 无系统级输入权限」的机器上，本插件自带的所有输入路径都不可用：
+### 键盘输入：需要 `ydotool`
 
-- XTest（`xdotool`）在原生 Wayland 下是空操作；
-- `kdotool` 0.3.0 **没有** `key`/`click`/`type` 子命令；
-- KWin 6.8.2 不执行脚本（`loadScript` 返回 id、`isScriptLoaded` 为 true，脚本从不运行）；
-- `Atspi.generate_keyboard_event()` 返回成功，但本机 KWin 丢弃了事件。
+原生 Wayland 下 XTest 无效、kdotool 没有输入命令、KWin 不执行脚本、AT-SPI 合成事件被丢弃——
+所以插件把 `ydotool` 作为首选输入后端（检测到 `ydotoold` 时才启用，没装则保持原行为）：
 
-可用的替代方案都需要机器主人点头：**`ydotool`**（AUR，`/dev/uinput`，需要 `input` 组并常驻
-`ydotoold`），或 **XDG 远程桌面门户**（`RemoteDesktop`，需要你在弹窗里授权）。
-在此之前，建议用 `kde_uia_click`（语义动作）和 `kde_uia_set_value` 完成不依赖键盘的操作。
+```bash
+yay -S ydotool                                   # AUR
+# 让当前用户能写 /dev/uinput（ACL 或加入 input 组）
+ydotoold --socket-path=$XDG_RUNTIME_DIR/.ydotool_socket --socket-perm=0600
+```
+
+实测：`echo lag-test-one` 逐字送达并执行成功。未装 `ydotool` 的机器上，键盘输入仍然不可用。
+
+## 余额
+
+> 💸 **请不要用这个插件烧余额。**
+>
+> 本插件每次调用都会把元素树/窗口列表写进上下文，**非常吃 token**。
+> 实测期间作者的余额一路掉到了个位数（¥8 以下），一次多窗口遍历就能吃掉好几毛。
+>
+> - 能读结构就别读整棵树：先用 `kde_uia_find` 缩小范围，再 `kde_uia_info`
+> - 不要对着同一个窗口反复 `tree`
+> - 不要用截图来代替读取——那是最贵的做法
+>
+> 钱是作者自己的，请替作者心疼一下。（这条也算写给自己看的。）
 
 ## 许可
 

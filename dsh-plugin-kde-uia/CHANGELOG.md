@@ -15,8 +15,64 @@ Wayland session** — see ["Keyboard input: known limit"](#keyboard-input-known-
 
 | Plugin | DSH | Python | Plasma | Primary distro |
 |---|---|---|---|---|
-| 0.1.1 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | **Arch Linux** |
+| 0.1.2 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | **Arch Linux** |
+| 0.1.1 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | Arch Linux |
 | 0.1.0 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | Arch Linux |
+
+## [0.1.2] — 2026-10-31
+
+Second field test: now driven entirely by the agent through the registered
+`kde_uia_*` tools rather than the CLI. All changes are additive; nothing in
+0.1.1 changes behaviour on a machine without the new inputs.
+
+### Fixed
+
+- **`kde_uia_activate` always failed** with `unknown op 'window-op'`. The tool
+  layer sent its internal `window-op` sentinel to the client verbatim; the
+  client knows only `activate` and `window` (with an `op`). `lib/tools.js` now
+  translates it (`windowOp()`), and a regression test asserts the sentinel can
+  never travel to the client again.
+- **All text reads returned an empty string.** `TextCapability` called
+  `self._a.get_text(start, end)`; in PyGObject the accessor's `get_text()`
+  takes no arguments and hands back the accessible, while the real reader is
+  `Atspi.Text.get_text(accessible, start, end)`. Every `text` value in a tree,
+  `find` or `info` result was blank because of this — including a terminal's
+  contents, which is what makes output verifiable without a screenshot.
+
+### Added
+
+- **`ydotool` input backend.** On a Wayland session where XTest is inert,
+  kdotool has no input commands and the compositor drops AT-SPI synthetic
+  events, key presses could not be delivered at all. When a `ydotoold` socket
+  exists (`$YDOTOOL_SOCKET`, else `$XDG_RUNTIME_DIR/.ydotool_socket`), keys,
+  typing and pointer clicks now go through `ydotool` first, then AT-SPI, then
+  the tool fallbacks. Machines without it keep the 0.1.1 order unchanged.
+- `compat.X11_TO_KEYCODE` / `MODIFIER_KEYCODES` / `ydotool_sequence()`: X
+  keysym -> Linux input-event key code, so `CTRL+Shift+t` becomes
+  `29:1 42:1 20:1 20:0 42:0 29:0`. Unknown keys raise `UsageError` so the next
+  backend is tried instead of sending a wrong event.
+- Typing through `ydotool` uses `-d 40 -H 40`: the 20 ms defaults dropped
+  characters (`echo` arrived as `keco`) when the focused client was busy.
+
+### Verified on the test machine (Arch, Plasma 6.8.2, Wayland)
+
+| Check | Result |
+|---|---|
+| `kde_uia_doctor` | six checks green |
+| `kde_uia_windows` / `tree` / `find` / `info` | works; Firefox tabs, Konsole toolbar, dialog structures readable |
+| `kde_uia_activate` | works after the `window-op` fix |
+| `kde_uia_screenshot` | works (spectacle) |
+| `kde_uia_type` / `kde_uia_keys` via `ydotool` | `echo lag-test-one` typed and executed verbatim |
+| Page body text of a web page | **not available**: Firefox exposes 4 placeholder characters through `document web` |
+| Terminal contents | **partial**: Konsole reports 7181 characters but only serves ~2591, so the newest lines cannot be read |
+
+### Requirements for the keyboard path
+
+```
+yay -S ydotool                        # AUR
+# /dev/uinput must be writable by the user (ACL or the `input` group)
+ydotoold --socket-path=$XDG_RUNTIME_DIR/.ydotool_socket --socket-perm=0600
+```
 
 ## [0.1.1] — 2026-10-31
 

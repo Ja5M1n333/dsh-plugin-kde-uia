@@ -313,20 +313,26 @@ class InputPatchTests(unittest.TestCase):
 
         self.input_mod = input_mod
 
-    def test_key_order_tries_atspi_first(self) -> None:
+    def test_key_order_prefers_ydotool_then_atspi(self) -> None:
         service = self.input_mod.InputService()
         service.strategy = "auto"
-        self.assertEqual(service._key_order()[0], "atspi")
+        order = service._key_order()
+        # With dyotoold reachable, kernel-level injection comes first; AT-SPI
+        # stays the fallback and plain X11 hosts are untouched.
+        expected_head = ["ydotool", "atspi"] if "ydotool" in order else ["atspi"]
+        self.assertEqual(order[: len(expected_head)], expected_head)
 
     def test_explicit_strategy_is_respected(self) -> None:
         service = self.input_mod.InputService()
         service.strategy = "xdotool"
         self.assertEqual(service._key_order(), ["xdotool"])
 
-    def test_pointer_order_tries_atspi_first(self) -> None:
+    def test_pointer_order_mirrors_key_order(self) -> None:
         service = self.input_mod.InputService()
         service.strategy = "auto"
-        self.assertEqual(service._pointer_order()[0], "atspi")
+        order = service._pointer_order()
+        expected_head = ["ydotool", "atspi"] if "ydotool" in order else ["atspi"]
+        self.assertEqual(order[: len(expected_head)], expected_head)
 
     def test_press_dry_run_reports_the_combo(self) -> None:
         service = self.input_mod.InputService()
@@ -344,3 +350,36 @@ class InputPatchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class YdotoolKeycodeTests(unittest.TestCase):
+    """The ydotool backend speaks Linux key codes, not keysyms."""
+
+    def test_combination_expands_to_press_and_release(self) -> None:
+        from kde_uia.compat import ydotool_sequence
+
+        # ctrl+t: hold ctrl, tap t, release ctrl.
+        self.assertEqual(ydotool_sequence("ctrl+t"), ["29:1", "20:1", "20:0", "29:0"])
+
+    def test_modifier_order_is_released_in_reverse(self) -> None:
+        from kde_uia.compat import ydotool_sequence
+
+        seq = ydotool_sequence("ctrl+shift+t")
+        self.assertEqual(seq[:2], ["29:1", "42:1"])
+        self.assertEqual(seq[-2:], ["42:0", "29:0"])
+
+    def test_named_keys_resolve(self) -> None:
+        from kde_uia.compat import ydotool_sequence
+
+        self.assertEqual(ydotool_sequence("Enter"), ["28:1", "28:0"])
+        self.assertEqual(ydotool_sequence("Escape"), ["1:1", "1:0"])
+        self.assertEqual(ydotool_sequence("F5"), ["63:1", "63:0"])
+
+    def test_unknown_key_is_a_usage_error(self) -> None:
+        from kde_uia import keys
+        from kde_uia.compat import ydotool_sequence
+        from kde_uia.errors import UsageError
+
+        with self.assertRaises(UsageError):
+            ydotool_sequence("ctrl+NoSuchKey")
+        _ = keys

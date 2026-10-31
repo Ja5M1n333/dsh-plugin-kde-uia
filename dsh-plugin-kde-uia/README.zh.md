@@ -38,16 +38,16 @@
 
 > 一句话：**这是一个学生用学校电脑给自己做的小工具，用不用、怎么用，还是请你按自己的情况来判断。**
 
-### 目前的状态：已在真实的 KDE Plasma 6 上跑过（v0.1.1）
+### 目前的状态：已在真实的 KDE Plasma 6 上跑过（v0.1.2）
 
-2026-10-31，这个插件第一次在真实的 Plasma 6.8.2 + Wayland 桌面上跑通。
+2026-10-31，这个插件在真实的 Plasma 6.8.2 + Wayland 桌面上跑通（0.1.1），第二轮由 agent 直接驱动工具的测试又修掉两处缺陷（0.1.2）。
 完整环境、原始输出、复现命令和未通过项见仓库根目录的 [FIELD-TEST.md](../FIELD-TEST.md)。摘要：
 
 - ✅ `kde_uia_doctor` 六项全过；窗口列表、元素树、`find`、`info` 可用。
 - ✅ 按无障碍动作的语义点击可用（点击后回读控件的 `checked` 状态确认真的切换了）。
 - ✅ 截图可用（spectacle）；窗口激活 / 最小化 / 关闭 / 缩放可用（kdotool，XWayland 窗口）。
-- ❌ **键盘输入（`kde_uia_keys` / `kde_uia_type`）在原生 Wayland 上不可用**：接口会返回成功，
-  但事件没有送达应用。这不是配置问题——本机所有无特权的输入路径都走不通，原因与替代方案见下。
+- ✅ **键盘输入（`kde_uia_keys` / `kde_uia_type`）在装了 `ydotool` 之后可用**：`echo lag-test-one` 逐字送达并执行成功。
+  没装 `ydotool` 时仍然不可用，原因与替代方案见下。
 
 ### 为什么 0.1.0 不能直接用（v0.1.1 已修）
 
@@ -65,8 +65,8 @@
 - KWin 6.8.2 不执行脚本（`loadScript` 返回 id、`isScriptLoaded` 为 true，脚本却从不运行）；
 - `Atspi.generate_keyboard_event()` 返回成功，但 KWin 丢弃了事件。
 
-可行的替代方案都需要机器主人的同意，所以没有默认启用：**`ydotool`**（AUR，`/dev/uinput`，
-需要加入 `input` 组并常驻 `ydotoold`），或 **XDG 远程桌面门户**（`RemoteDesktop`，会让你在弹窗里授权）。
+0.1.2 起，检测到 `ydotoold` 时**自动**把 `ydotool` 作为首选输入后端（AUR，`/dev/uinput` 需当前用户可写，
+常驻 `ydotoold`）；没有守护进程时保持原行为。另一个选择是 **XDG 远程桌面门户**（`RemoteDesktop`，弹窗授权）。
 在它们接入之前，建议用 `kde_uia_click`、`kde_uia_set_value` 这类不依赖键盘的操作。
 
 

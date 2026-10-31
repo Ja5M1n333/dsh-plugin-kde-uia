@@ -50,7 +50,7 @@
 > In one line: **a small tool a student built on a school computer for personal use —
 > whether and how to use it is best judged by your own situation.**
 
-### Current status: first field test on a real Plasma 6 desktop (v0.1.1)
+### Current status: field-tested on a real Plasma 6 desktop (v0.1.2)
 
 On 2026-10-31 this plugin ran against a live KDE Plasma 6.8.2 Wayland session for the first
 time. The full environment, raw output, reproduction commands and known failures are in
@@ -61,10 +61,9 @@ time. The full environment, raw output, reproduction commands and known failures
   back before and after to confirm the toggle).
 - ✅ Screenshots work (spectacle); window activate / minimize / close / resize work (kdotool,
   XWayland windows).
-- ❌ **Keyboard input (`kde_uia_keys` / `kde_uia_type`) does not work on native Wayland:** the
-  call reports success, but the event never reaches the application. This is not a
-  configuration mistake — every unprivileged input path is closed on that machine (details
-  below).
+- ✅ **Keyboard input works once `ydotool` runs.** 0.1.2 adds a `ydotool` backend, used
+  automatically when a `ydotoold` socket exists; `echo lag-test-one` reached the terminal
+  verbatim. Without `ydotool`, keys cannot be delivered on native Wayland.
 
 ### Why 0.1.0 did not work out of the box (fixed in 0.1.1)
 
