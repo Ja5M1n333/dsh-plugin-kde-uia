@@ -20,7 +20,13 @@ function fakeContext({ shell } = {}) {
   const registered = new Map()
   const disposed = []
   const logs = { info: [], warn: [], error: [] }
+  const effects = []
   const ctx = {
+    // Like cordis: apply() registers teardown through the plugin context.
+    effect: (factory) => {
+      effects.push(factory)
+      return () => {}
+    },
     logger: {
       info: (m) => logs.info.push(String(m)),
       warn: (m) => logs.warn.push(String(m)),
@@ -38,7 +44,15 @@ function fakeContext({ shell } = {}) {
       }
     }
   }
-  return { ctx, registered, disposed, logs }
+  return { ctx, registered, disposed, logs, effects }
+}
+
+/** Run the effect disposers a cordis fiber would call on unload. */
+function disposeEffects(effects) {
+  for (const factory of effects.splice(0)) {
+    const disposer = factory()
+    if (typeof disposer === 'function') disposer()
+  }
 }
 
 const envDocument = JSON.stringify({ ok: true, result: { platform: 'linux', sessionType: 'wayland' } })
@@ -68,8 +82,31 @@ test('exports the cordis function-plugin shape (no default export)', async () =>
   assert.deepEqual(plugin.inject, ['tools'])
   assert.equal(typeof plugin.apply, 'function')
   assert.equal(plugin.default, undefined, 'a default export makes loaders drop inject')
-  assert.equal(plugin.Config.type, 'object')
-  assert.equal(plugin.Config.format, 'form')
+  // The loader validates through cordis' Standard Schema bridge; a plain
+  // JSON-Schema object (what 0.1.0 shipped) makes it throw
+  // `Cannot read properties of undefined (reading 'validate')` and the entry
+  // never activates.
+  assert.equal(typeof plugin.Config['~standard']?.validate, 'function')
+  const resolved = plugin.Config['~standard'].validate({ runtime: 'local' })
+  assert.equal(resolved.issues, undefined)
+  assert.equal(resolved.value.runtime, 'local')
+})
+
+test('apply() returns nothing and registers teardown through ctx.effect', () => {
+  // Cordis reads apply()'s return value as a setup promise; the 0.1.0 handle
+  // object broke activation, so apply() must stay void and hand cleanup to the
+  // lifecycle hook instead.
+  const { ctx, effects } = fakeContext({})
+  const returned = plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
+  assert.equal(returned, undefined)
+  assert.equal(effects.length, 1, 'apply must register exactly one effect')
+  let disposed = false
+  const disposer = effects[0]()
+  if (typeof disposer === 'function') {
+    disposer()
+    disposed = true
+  }
+  assert.equal(disposed, true, 'the effect must return a disposer')
 })
 
 test('package.json declares a valid dsh bundle and DSH peer versions', async () => {
@@ -123,14 +160,14 @@ test('apply() registers the tools with the fake registry', async (t) => {
   const { setDefineToolForTests } = plugin
   setDefineToolForTests(realDefineTool)
   const shell = fakeShell()
-  const { ctx, registered, logs } = fakeContext({ shell })
-  const handle = plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
+  const { ctx, registered, logs, effects } = fakeContext({ shell })
+  plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
   await waitFor(() => registered.size > 0)
   assert.equal(registered.size, 13)
   assert.ok(registered.has('kde_uia_doctor'))
   assert.ok(registered.has('kde_uia_click'))
   assert.match(logs.info.join('\n'), /registered 13 tools/)
-  handle.dispose()
+  disposeEffects(effects)
   assert.equal(registered.size, 0)
 })
 
@@ -141,11 +178,11 @@ test('apply() in readOnly mode registers only read tools', async (t) => {
   }
   plugin.setDefineToolForTests(loader.defineTool)
   const { ctx, registered } = fakeContext({ shell: fakeShell() })
-  const handle = plugin.apply(ctx, { runtime: 'wsl', readOnly: true, doctorOnLoad: false })
+  plugin.apply(ctx, { runtime: 'wsl', readOnly: true, doctorOnLoad: false })
   await waitFor(() => registered.size > 0)
   assert.equal(registered.size, 13 - toolsModule.MUTATING_TOOLS.size)
   for (const name of toolsModule.MUTATING_TOOLS) assert.ok(!registered.has(name), name)
-  handle.dispose()
+  disposeEffects(effects)
 })
 
 test('doctor runs once on load and warnings are logged', async (t) => {
@@ -164,10 +201,10 @@ test('doctor runs once on load and warnings are logged', async (t) => {
     return { result: async () => ({ stdout: { text }, stderr: { text: '' }, aborted: false }) }
   }
   const { ctx, logs } = fakeContext({ shell: failingDoctor })
-  const handle = plugin.apply(ctx, { runtime: 'wsl' })
+  plugin.apply(ctx, { runtime: 'wsl' })
   await waitFor(() => calls.some((c) => c.argv.join(' ').includes('ops doctor')))
   await waitFor(() => logs.warn.some((line) => /atspi: no typelib/.test(line)))
-  handle.dispose()
+  disposeEffects(effects)
 })
 
 test('tool calls go through the transport and return the client value', async (t) => {
@@ -186,8 +223,8 @@ test('tool calls go through the transport and return the client value', async (t
     else if (command.includes('ops doctor')) text = doctorDocument
     return { result: async () => ({ stdout: { text }, stderr: { text: '' }, aborted: false }) }
   }
-  const { ctx, registered } = fakeContext({ shell })
-  const handle = plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
+  const { ctx, registered, effects } = fakeContext({ shell })
+  plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
   await waitFor(() => registered.size > 0)
   const windows = await registered.get('kde_uia_windows').execute({}, {})
   assert.equal(windows.windows[0].title, 'Dolphin')
@@ -206,7 +243,7 @@ test('tool calls go through the transport and return the client value', async (t
     assert.equal(request.argv[bash + 1], '-lc')
     assert.match(request.argv[bash + 2], /^bash -lc /)
   }
-  handle.dispose()
+  disposeEffects(effects)
 })
 
 test('a failing client document becomes a tool Error with its hint', async (t) => {
@@ -222,11 +259,11 @@ test('a failing client document becomes a tool Error with its hint', async (t) =
       : envDocument
     return { result: async () => ({ stdout: { text }, stderr: { text: '' }, aborted: false }) }
   }
-  const { ctx, registered } = fakeContext({ shell })
-  const handle = plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
+  const { ctx, registered, effects } = fakeContext({ shell })
+  plugin.apply(ctx, { runtime: 'wsl', doctorOnLoad: false })
   await waitFor(() => registered.size > 0)
   await assert.rejects(registered.get('kde_uia_find').execute({ text: 'Save' }, {}), /no element matched\nHint: run kde_uia_tree/)
-  handle.dispose()
+  disposeEffects(effects)
 })
 
 test('a misconfigured runtime still registers tools that report CONFIG', async (t) => {
@@ -236,11 +273,11 @@ test('a misconfigured runtime still registers tools that report CONFIG', async (
   }
   plugin.setDefineToolForTests(loader.defineTool)
   const { ctx, registered, logs } = fakeContext({})
-  const handle = plugin.apply(ctx, { runtime: 'ssh', doctorOnLoad: false })
+  plugin.apply(ctx, { runtime: 'ssh', doctorOnLoad: false })
   await waitFor(() => registered.size > 0)
   assert.match(logs.warn.join('\n'), /misconfigured/)
   await assert.rejects(registered.get('kde_uia_windows').execute({}, {}), /misconfigured/)
-  handle.dispose()
+  disposeEffects(effects)
 })
 
 async function waitFor(predicate, timeoutMs = 3000) {

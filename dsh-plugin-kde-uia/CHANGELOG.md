@@ -5,17 +5,131 @@ All notable changes to `dsh-plugin-kde-uia` are documented here. The format foll
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) for both the plugin and the Python
 client. **Compatibility** notes name the DSH runtime and anything a future release could break.
 
-**Status note (v0.1.0):** this is a student's side project and has not been run against a live
-KDE Plasma desktop yet. All tests and checks so far ran on a Windows host plus an Ubuntu 24.04
-WSL server that has neither PyGObject nor KWin. The Arch package names, the KWin scripting
-bridge and the Wayland input path were worked out from documentation and code logic rather
-than confirmed by a run — see ["Verification status"](#verification-status) below.
+**Status note (v0.1.1):** the plugin now runs on a live KDE Plasma desktop. The first field
+test (Plasma 6.8.2 / Wayland / Arch, 2026-10-31) found ten defects in the 0.1.0 client; all
+are fixed here. It also showed that **keyboard input cannot be delivered on this kind of
+Wayland session** — see ["Keyboard input: known limit"](#keyboard-input-known-limit) and
+[FIELD-TEST.md](../FIELD-TEST.md).
 
 ## Compatibility
 
 | Plugin | DSH | Python | Plasma | Primary distro |
 |---|---|---|---|---|
-| 0.1.0 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | **Arch Linux** |
+| 0.1.1 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | **Arch Linux** |
+| 0.1.0 | 0.2.0-rc.2 (exact peer) | 3.9+ | 5.x / 6.x, Wayland or X11 | Arch Linux |
+
+## [0.1.1] — 2026-10-31
+
+First release that has been verified on a real KDE Plasma desktop. Both the plugin and the
+bundled Python client move to 0.1.1; the client's fixes are in `kde-uia/src/kde_uia/compat.py`
+and apply on import (`KDE_UIA_NO_PATCHES=1` opts out).
+
+### Fixed — plugin never activated in DSH 0.2.0-rc.2
+
+Enabling the plugin in DSH failed with:
+
+```
+tool-kde-uia (dsh-plugin-kde-uia): TypeError: Cannot read properties of undefined (reading 'validate')
+```
+
+Two independent causes, both fixed:
+
+- **`Config` was a plain JSON-Schema object.** DSH validates every plugin through cordis'
+  Standard Schema bridge (`runtime.Config['~standard'].validate`), which a bare JSON Schema
+  does not provide. `Config` is now built with `@deepseek-ai/schemastery` (the schema library
+  every built-in DSH plugin uses) and declares that dependency. A test now asserts the
+  `~standard` contract so this cannot silently regress.
+- **`apply()` returned an object.** Cordis treats a returned value as a setup promise and
+  rejects non-thenable-shaped results; the returned `{ dispose, info }` broke activation.
+  Tool teardown now registers through `ctx.effect()`, which is the cordis lifecycle hook, and
+  `apply()` returns nothing.
+
+Verified with the real loader: the entry imports, the config validates, and all 13
+`kde_uia_*` tools register (`registered 13 tools via local Linux session`), with the on-load
+probe reporting `desktop automation ready`.
+
+### Fixed — defects found on a live Plasma 6.8.2 / Wayland session
+
+Each item names the failed call, the real API, and the user-visible symptom it caused.
+
+1. **`doctor` crashed on the AT-SPI check.** `ops.diagnose` called `desktop.child_count()`;
+   PyGObject spells it `get_child_count()`. Symptom: `AttributeError` in the `atspi` row.
+2. **No window ever counted as visible.** `AtspiElement.state_set()` called
+   `self.acc.get_state_set()`; PyGObject exposes `self.acc.states`. Every state read returned
+   `False`, so `showing` was always false and `windows`/`tree` came back empty.
+3. **State names never resolved.** `_state_type()` looked up `StateType.STATE_SHOWING`;
+   PyGObject's members have no `STATE_` prefix (`StateType.SHOWING`). All state checks raised
+   and were swallowed as `False`.
+4. **Actions were invisible.** `ActionCapability` used `get_action_count()` and
+   `do_action(0, name)`; the real API is `get_n_actions()` and `do_action(index)`. No element
+   reported an action and every semantic click failed.
+5. **The KWin scripting bridge cannot work on Plasma 6.** `/KWin` exports no
+   `org.kde.KConfig`, and KWin 6.8.2 answers `isScriptLoaded` with `true` while never executing
+   the script. A `kdotool` backend replaces it for listing, activate, minimize, close and resize.
+6. **Qt reported garbage values.** `get_current_value()` returned an uninitialised double
+   (`6.9e-310`) for widgets without a value; only roles that carry a value are read now.
+7. **Scoped searches never matched.** `find_windows` applied the element `role`/`name` to the
+   window frame, so `{"window": …, "role": "push button"}` failed before the tree was walked.
+8. **Refs collided between instances.** `_ref_path` dropped the application index, so two
+   Gwenview windows both produced `uia:1:gwenview:0`. A ref now carries an `instance` suffix
+   (the numeric application index when PyGObject exposes no path suffix), and resolving prefers
+   that index. Refs without an instance keep the 0.1.0 shape.
+9. **Screenshots failed on the spectacle path.** `_require_png()` was called with two
+   arguments; `import` was invoked without `-silent` and waited for a file name on stdin.
+10. **Nothing registered as an AT-SPI client.** Children were never preloaded, so toolkit trees
+    stayed shallow.
+
+### Added
+
+- `kde-uia/src/kde_uia/compat.py` — the compatibility layer, documented defect by defect,
+  verified on Arch / Plasma 6.8.2 / Wayland / Python 3.14 / PyGObject 3.58.1.
+- `compat.py` adds a synthetic-input path on top of AT-SPI: `Atspi.generate_keyboard_event`
+  and `generate_mouse_event` are tried before xdotool/kdotool, because kdotool 0.3.0 ships no
+  input commands and XTest is inert under Wayland.
+- [FIELD-TEST.md](../FIELD-TEST.md) — the field-test report: environment, raw output,
+  reproduction commands, and what did not pass.
+- `install.sh` at the repository root — installs the client to `/opt/dsh/kde-uia` and places
+  the package in the DSH desktop profile without touching the running application.
+- `kde-uia/tests/test_compat.py` — 19 regression tests that fake the AT-SPI surface with the
+  names **PyGObject really provides** (`states`, `get_n_actions()`, `do_action(index)`, no
+  `path_suffix()`), so the ten defects above cannot silently come back. The client suite now has 69 tests.
+
+### Changed
+
+- `kde_uia_doctor`'s `window-backend` row now reports `KdotoolBackend` when kdotool answers;
+  the `kwin` backend stays selectable with `--backend kwin`.
+
+### Keyboard input: known limit
+
+**`kde_uia_keys` and `kde_uia_type` cannot deliver keystrokes on a native Wayland session where
+the compositor does not act on AT-SPI synthetic events.** On the test machine every
+unprivileged path was closed:
+
+| Path | Result |
+|---|---|
+| XTest (`xdotool`) | no-op under native Wayland |
+| `kdotool` 0.3.0 | ships no `key` / `click` / `type` commands |
+| KWin scripting bridge | KWin 6.8.2 never runs the script |
+| `Atspi.generate_keyboard_event` | returns `True`, event dropped by KWin |
+
+The supported fixes need the machine owner's decision and are **not** enabled automatically:
+**`ydotool`** (AUR, `/dev/uinput`, `input` group, `ydotoold` running) or the **XDG Remote
+Desktop portal** (`RemoteDesktop`, grants input after a user prompt). Pointer actions through
+accessibility actions, `set_value`, and screenshots do not depend on this path.
+
+### Verification status (v0.1.1)
+
+| Area | Verified? | How |
+|---|---|---|
+| Tool declarations compile with the host's real `defineTool` | **yes** | tests against a DSH 0.2.0-rc.2 install |
+| JSON-Schema gate + argument validation | **yes** | `scripts/smoke-dsh-load.mjs` |
+| WSL transport (wsl.exe → python client → JSON) | **yes** (0.1.0; not re-run in 0.1.1) | live test on a Windows host |
+| AT-SPI element tree / find / refs | **yes** | live Plasma 6.8.2 session |
+| Semantic click (accessibility action) + state read-back | **yes** | live session, Gwenview toggle |
+| Window listing / activate / minimize / resize | **yes** (XWayland windows) | live session, kdotool backend |
+| Screenshots (spectacle) | **yes** | live session |
+| Keyboard / typing | **no** | live session: events are dropped (see above) |
+| Plasma 5, X11 sessions, other distros | **no** | — |
 
 ## [Unreleased]
 

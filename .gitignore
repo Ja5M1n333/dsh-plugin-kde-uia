@@ -8,6 +8,8 @@
 !/.gitattributes
 !/README.md
 !/WORKFLOW.md
+!/FIELD-TEST.md
+!/install.sh
 
 # Build artifacts, caches and local scratch data.
 node_modules/

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-kde-uia",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Give a DeepSeek Harness agent Windows-UI-Automation-style control of a Linux KDE Plasma desktop over AT-SPI2, KWin and X11 (Arch Linux first; works from a Windows DSH host through WSL or SSH).",
   "private": true,
   "type": "module",
@@ -47,6 +47,9 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.5"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": "0.2.0-rc.2",

@@ -17,6 +17,8 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import z from '@deepseek-ai/schemastery'
+
 import { buildTools, MUTATING_TOOLS, TOOL_PREFIX } from './tools.js'
 import {
   buildTarget,
@@ -36,33 +38,31 @@ export const name = 'kde-uia'
 export const inject = ['tools']
 
 /**
- * Configuration schema. `format: 'form'` is an annotation the settings UI
- * understands; DSH itself does not validate these fields, so `apply()`
- * normalises them (see {@link normalizeConfig}).
+ * Configuration schema. DSH validates every plugin's `Config` through cordis'
+ * Standard Schema bridge (`runtime.Config['~standard'].validate`), which a
+ * plain JSON-Schema object does not provide — that made the loader throw
+ * `Cannot read properties of undefined (reading 'validate')` and the entry
+ * never activate. Built-in plugins use `@deepseek-ai/schemastery`, so this
+ * does too.
  */
-export const Config = {
-  type: 'object',
-  format: 'form',
-  properties: {
-    runtime: {
-      type: 'string',
-      enum: ['auto', 'wsl', 'ssh', 'local'],
-      default: 'auto',
-      description: 'Where the Linux desktop lives: auto (WSL on Windows, local on Linux), wsl, ssh, or local.'
-    },
-    wslDistribution: { type: 'string', default: '', description: 'WSL distribution (empty = the default one).' },
-    remotePath: { type: 'string', default: '', description: 'Directory containing the kde_uia package inside Linux (default: auto-discovered).' },
-    remotePython: { type: 'string', default: 'python3', description: 'Python interpreter inside Linux (must have PyGObject).' },
-    wslCommand: { type: 'string', default: '', description: 'wsl.exe path (empty = System32/default).' },
-    sshHost: { type: 'string', default: '', description: 'SSH destination user@host when runtime is ssh.' },
-    sshIdentity: { type: 'string', default: '', description: 'SSH private key path (optional).' },
-    sshOptions: { type: 'array', items: { type: 'string' }, default: [], description: 'Extra ssh -o options (advanced).' },
-    timeoutMs: { type: 'number', default: 120000, minimum: 1000, description: 'Per-call timeout budget.' },
-    readOnly: { type: 'boolean', default: false, description: 'Register only the read-only tools (no click/type/keys).' },
-    doctorOnLoad: { type: 'boolean', default: true, description: 'Run the offline capability probe once when the plugin mounts.' },
-    executable: { type: 'string', default: '', description: 'Command launching the kde_uia client (empty = bundled Python via DSH shell).' }
-  }
-}
+export const Config = z.object({
+  runtime: z.union([z.const('auto'), z.const('wsl'), z.const('ssh'), z.const('local')]).default('auto')
+    .description('Where the Linux desktop lives: auto (WSL on Windows, local on Linux), wsl, ssh, or local.'),
+  wslDistribution: z.string().default('').description('WSL distribution (empty = the default one).'),
+  remotePath: z.string().default('')
+    .description('Directory containing the kde_uia package inside Linux (default: auto-discovered).'),
+  remotePython: z.string().default('python3').description('Python interpreter inside Linux (must have PyGObject).'),
+  wslCommand: z.string().default('').description('wsl.exe path (empty = System32/default).'),
+  sshHost: z.string().default('').description('SSH destination user@host when runtime is ssh.'),
+  sshIdentity: z.string().default('').description('SSH private key path (optional).'),
+  sshOptions: z.array(z.string()).default([]).description('Extra ssh -o options (advanced).'),
+  timeoutMs: z.number().min(1000).default(120_000).description('Per-call timeout budget.'),
+  readOnly: z.boolean().default(false).description('Register only the read-only tools (no click/type/keys).'),
+  doctorOnLoad: z.boolean().default(true)
+    .description('Run the offline capability probe once when the plugin mounts.'),
+  executable: z.string().default('')
+    .description('Command launching the kde_uia client (empty = bundled Python via DSH shell).')
+})
 
 let cachedDefineTool
 
@@ -295,26 +295,27 @@ export function apply(ctx, rawConfig) {
     logger?.warn?.('kde-uia: no tool registry (ctx.tools); mount @deepseek-ai/dsh-tools.')
   }
 
-  return {
-    /** Dispose the tool registrations (the loader calls this on reload). */
-    dispose() {
-      disposing = true
-      for (const dispose of registered.splice(0)) {
-        try {
-          dispose()
-        } catch {
-          // the registry may already be gone
-        }
+  // Cordis owns teardown: the fiber disposes whatever the plugin's context
+  // registered. Returning an object from apply() would be read as a promise
+  // (cordis then throws in its validation step), so nothing is returned.
+  const disposeTools = () => {
+    disposing = true
+    for (const dispose of registered.splice(0)) {
+      try {
+        dispose()
+      } catch {
+        // the registry may already be gone
       }
-    },
-    /** Introspection for tests and settings UIs. */
-    info: {
-      config,
-      runtime: target?.kind ?? null,
-      clientPath: client?.clientPath() ?? null,
-      mutatingTools: [...MUTATING_TOOLS]
     }
   }
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => disposeTools)
+  } else if (typeof ctx.on === 'function') {
+    // Fallback for hosts without effect(): tie cleanup to the fiber's disposal.
+    ctx.on('dispose', disposeTools)
+  }
+
+  return undefined
 }
 
 async function runExecutable(config, op, args, exec, processRun) {

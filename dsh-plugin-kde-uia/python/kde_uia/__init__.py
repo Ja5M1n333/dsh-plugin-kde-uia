@@ -42,7 +42,14 @@ from .refs import ElementRef, make_ref, parse_ref
 from .selector import Selector
 from .session import DesktopSession, Options
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
+
+# Install the Plasma 6 / PyGObject compatibility layer before anything can call
+# the patched modules; see compat.py for the defects it repairs and how to opt
+# out (KDE_UIA_NO_PATCHES=1).
+from .compat import install_patches as _install_patches  # noqa: E402
+
+_install_patches()
 
 __all__ = [
     "Client",

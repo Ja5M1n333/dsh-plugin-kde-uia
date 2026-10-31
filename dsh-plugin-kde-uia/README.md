@@ -50,21 +50,47 @@
 > In one line: **a small tool a student built on a school computer for personal use —
 > whether and how to use it is best judged by your own situation.**
 
-### Current status: not yet run on a real KDE desktop
+### Current status: first field test on a real Plasma 6 desktop (v0.1.1)
 
-This version has not yet been exercised against a live KDE Plasma session. Development and
-testing happened on a Windows host plus one **WSL server without KDE or PyGObject**. So:
+On 2026-10-31 this plugin ran against a live KDE Plasma 6.8.2 Wayland session for the first
+time. The full environment, raw output, reproduction commands and known failures are in
+[FIELD-TEST.md](../FIELD-TEST.md). Summary:
 
-- **Verified:** tool declarations compile with DSH's own `defineTool`, the JSON-Schema gate,
-  loading against real DSH modules, the full WSL transport, and argument round-trips with
-  quotes, CJK text and `$(…)`.
-- **Not verified yet:** AT-SPI element trees and clicks, the KWin scripting bridge, Wayland
-  input, and the screenshot backends. These were worked out from the documentation and code
-  logic rather than confirmed by a run.
+- ✅ `kde_uia_doctor` passes all six checks; window listing, element trees, `find` and `info` work.
+- ✅ Semantic clicks through accessibility actions work (the widget's `checked` state was read
+  back before and after to confirm the toggle).
+- ✅ Screenshots work (spectacle); window activate / minimize / close / resize work (kdotool,
+  XWayland windows).
+- ❌ **Keyboard input (`kde_uia_keys` / `kde_uia_type`) does not work on native Wayland:** the
+  call reports success, but the event never reaches the application. This is not a
+  configuration mistake — every unprivileged input path is closed on that machine (details
+  below).
 
-The full table is in [CHANGELOG › Verification status](CHANGELOG.md#verification-status).
-**Should you get it working, a line about it in an issue would be genuinely helpful** — that
-is the most useful contribution at the moment.
+### Why 0.1.0 did not work out of the box (fixed in 0.1.1)
+
+The 0.1.0 Python client was written from documentation and had **ten real defects**; any one
+of them was enough to break tree reading or clicks (PyGObject method names, a KWin scripting
+bridge that Plasma 6 cannot drive, scoped searches that never matched, refs colliding between
+two instances of one app, and more). The fixes live in `kde-uia/src/kde_uia/compat.py` and
+apply automatically when the client is imported; each one is explained in the
+[CHANGELOG](CHANGELOG.md#011--2026-10-31). Set `KDE_UIA_NO_PATCHES=1` to compare against the
+original behaviour.
+
+### Known limit: keyboard input under Wayland
+
+Every input path the plugin ships is closed on that machine:
+
+- XTest (`xdotool`) is a no-op under native Wayland;
+- `kdotool` 0.3.0 has no `key` / `click` / `type` subcommands;
+- KWin 6.8.2 does not run scripts (`loadScript` returns an id and `isScriptLoaded` says true,
+  yet the script never executes);
+- `Atspi.generate_keyboard_event()` returns success, but KWin drops the event.
+
+The workable alternatives all need the machine owner's consent, so none is enabled by
+default: **`ydotool`** (AUR, `/dev/uinput`, `input` group plus a running `ydotoold`) or the
+**XDG Remote Desktop portal** (`RemoteDesktop`, which asks you for permission in a dialog).
+Until then, prefer the keyboard-free tools: `kde_uia_click`, `kde_uia_set_value`.
+
 
 ---
 

@@ -38,18 +38,37 @@
 
 > 一句话：**这是一个学生用学校电脑给自己做的小工具，用不用、怎么用，还是请你按自己的情况来判断。**
 
-### 目前的状态：还没在真正的 KDE 上跑过
+### 目前的状态：已在真实的 KDE Plasma 6 上跑过（v0.1.1）
 
-这个版本目前还没有在真实的 KDE Plasma 桌面上运行验证过。开发和测试都在一台 Windows 主机上完成，
-Linux 侧只有一个没有装 KDE 和 PyGObject 的 WSL 服务器。所以：
+2026-10-31，这个插件第一次在真实的 Plasma 6.8.2 + Wayland 桌面上跑通。
+完整环境、原始输出、复现命令和未通过项见仓库根目录的 [FIELD-TEST.md](../FIELD-TEST.md)。摘要：
 
-- 已经验证的：工具声明能用 DSH 自己的 `defineTool` 编译、JSON Schema 校验、真实 DSH 模块加载、
-  WSL 传输全链路，以及带引号、中文、`$(…)` 的参数往返。
-- **还没验证的**：AT-SPI 元素树与点击、KWin 脚本桥接、Wayland 下的输入、截图后端。
-  这部分是按文档和代码逻辑推演出来的，还没有实际跑通过。
+- ✅ `kde_uia_doctor` 六项全过；窗口列表、元素树、`find`、`info` 可用。
+- ✅ 按无障碍动作的语义点击可用（点击后回读控件的 `checked` 状态确认真的切换了）。
+- ✅ 截图可用（spectacle）；窗口激活 / 最小化 / 关闭 / 缩放可用（kdotool，XWayland 窗口）。
+- ❌ **键盘输入（`kde_uia_keys` / `kde_uia_type`）在原生 Wayland 上不可用**：接口会返回成功，
+  但事件没有送达应用。这不是配置问题——本机所有无特权的输入路径都走不通，原因与替代方案见下。
 
-完整对照表见 [CHANGELOG › Verification status](CHANGELOG.md#verification-status)。
-如果你第一次跑通了，愿意在 issue 里留一句结果的话，会非常有帮助。
+### 为什么 0.1.0 不能直接用（v0.1.1 已修）
+
+0.1.0 的 Python 客户端是按文档写出来的，真机上暴露了 **10 处缺陷**，其中任何一处都会让读树或点击失败
+（PyGObject 接口名不符、Plasma 6 的 KWin 脚本桥根本不可用、窗口内搜索永远搜不到、多实例引用冲突……）。
+这些修复集中在 `kde-uia/src/kde_uia/compat.py`，导入客户端时自动生效，逐条说明见
+[CHANGELOG](CHANGELOG.md#011--2026-10-31)。若想对照原始行为，设 `KDE_UIA_NO_PATCHES=1` 关闭补丁层。
+
+### 键盘输入的已知限制
+
+在这台机器上，插件所有输入路径都被系统挡住了：
+
+- XTest（`xdotool`）在原生 Wayland 下是空操作；
+- `kdotool` 0.3.0 没有 `key` / `click` / `type` 子命令；
+- KWin 6.8.2 不执行脚本（`loadScript` 返回 id、`isScriptLoaded` 为 true，脚本却从不运行）；
+- `Atspi.generate_keyboard_event()` 返回成功，但 KWin 丢弃了事件。
+
+可行的替代方案都需要机器主人的同意，所以没有默认启用：**`ydotool`**（AUR，`/dev/uinput`，
+需要加入 `input` 组并常驻 `ydotoold`），或 **XDG 远程桌面门户**（`RemoteDesktop`，会让你在弹窗里授权）。
+在它们接入之前，建议用 `kde_uia_click`、`kde_uia_set_value` 这类不依赖键盘的操作。
+
 
 ---
 

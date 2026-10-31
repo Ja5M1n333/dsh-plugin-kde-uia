@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kde-uia"
-version = "0.1.0"
+version = "0.1.1"
 description = "Windows UI Automation-style desktop automation for Linux, KDE Plasma first (AT-SPI2, KWin, X11)"
 readme = "README.md"
 license = { text = "MIT" }
